@@ -22,12 +22,12 @@ export async function POST(req: NextRequest) {
     const attempts = [
       {
         url:  BY_EXTERNAL_ID,
-        body: { partnerId: PARTNER_ID, accountId: ACCOUNT_ID, externalId: id },
+        body: { partnerId: PARTNER_ID, accountId: ACCOUNT_ID, externalIds: [id] },
         label: "by external ID",
       },
       {
         url:  BY_LOAD_NUMBER,
-        body: { partnerId: PARTNER_ID, accountId: ACCOUNT_ID, loadNumber: id },
+        body: { partnerId: PARTNER_ID, accountId: ACCOUNT_ID, loadNumbers: [id] },
         label: "by load number",
       },
     ];
