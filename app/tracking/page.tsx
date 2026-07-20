@@ -25,6 +25,12 @@ interface TrackEvent {
   stopNumber?: number;
 }
 
+interface LocationPing {
+  lat: string;
+  lng: string;
+  timestamp?: string;
+}
+
 interface TrackResult {
   loadNumber: string;
   shipperLoadId?: string;
@@ -35,6 +41,7 @@ interface TrackResult {
   lng?: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   pings?: any[];
+  locationPings?: LocationPing[];
   stops: Stop[];
   events: TrackEvent[];
 }
@@ -64,6 +71,7 @@ export default function TrackingPage() {
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState<string | null>(null);
   const [result, setResult]           = useState<TrackResult | null>(null);
+  const [showAllEvents, setShowAllEvents] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function handleSearch(e: React.FormEvent) {
@@ -287,96 +295,172 @@ export default function TrackingPage() {
                   )}
                 </div>
 
-                {/* Pickup & Delivery cards */}
-                {result.stops.length > 0 ? (
-                  <div className="px-6 py-5 border-b border-gray-100 space-y-3">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Shipment Route</p>
+                {/* Stops — Pickup & Delivery */}
+                {result.stops.length > 0 && (
+                  <div className="border-b border-gray-100">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-6 pt-5 pb-3">Stops</p>
+
                     {result.stops.map((stop, idx) => {
-                      const isPickup = stop.type?.toLowerCase().includes("pickup") || idx === 0;
+                      const isPickup   = stop.type?.toLowerCase().includes("pickup") || idx === 0;
+                      const isDelivery = !isPickup;
+                      const label      = isPickup ? "Pickup" : "Delivery";
+                      const letter     = String.fromCharCode(65 + idx);
+                      const hasArrived = !!stop.arrivedAt;
+
                       return (
-                        <div key={idx} className={`rounded-lg border p-4 ${isPickup ? "border-blue-100 bg-blue-50" : "border-orange-100 bg-orange-50"}`}>
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white ${isPickup ? "bg-[#1a4fa0]" : "bg-[#e07b2b]"}`}>
-                              {String.fromCharCode(65 + idx)}
+                        <div key={idx} className="px-6 pb-5">
+                          {/* Stop header */}
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${isPickup ? "bg-[#1a4fa0]" : "bg-[#e07b2b]"}`}>
+                              {letter}
                             </div>
-                            <span className={`text-xs font-bold uppercase tracking-wide ${isPickup ? "text-blue-700" : "text-orange-700"}`}>
-                              {isPickup ? "Pickup" : "Delivery"}
-                            </span>
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <span className={`text-xs font-bold uppercase tracking-wide ${isPickup ? "text-blue-700" : "text-orange-700"}`}>
+                                {label}
+                              </span>
+                              {hasArrived && (
+                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${isPickup ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700"}`}>
+                                  Completed
+                                </span>
+                              )}
+                              {!hasArrived && stop.scheduledAt && (
+                                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                                  Scheduled
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          {stop.address && (
-                            <p className="text-sm font-semibold text-gray-800">{stop.address}</p>
+
+                          {/* Address block */}
+                          <div className={`rounded-xl border p-4 ${isPickup ? "bg-blue-50 border-blue-100" : isDelivery && hasArrived ? "bg-green-50 border-green-100" : "bg-orange-50 border-orange-100"}`}>
+                            {stop.address && (
+                              <p className="text-sm font-bold text-gray-900 mb-0.5">{stop.address}</p>
+                            )}
+                            <p className="text-sm font-semibold text-gray-700">
+                              {[stop.city, stop.state].filter(Boolean).join(", ")}
+                              {stop.zip && <span className="text-gray-500"> {stop.zip}</span>}
+                            </p>
+
+                            {/* Times */}
+                            <div className="mt-3 pt-3 border-t border-black/5 space-y-1.5">
+                              {stop.scheduledAt && (
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs text-gray-500">Scheduled</span>
+                                  <span className="text-xs font-semibold text-gray-700">{formatTs(stop.scheduledAt)}</span>
+                                </div>
+                              )}
+                              {stop.arrivedAt && (
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs text-gray-500">Arrived</span>
+                                  <span className="text-xs font-semibold text-gray-700">{formatTs(stop.arrivedAt)}</span>
+                                </div>
+                              )}
+                              {stop.departedAt && (
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs text-gray-500">Departed</span>
+                                  <span className="text-xs font-semibold text-gray-700">{formatTs(stop.departedAt)}</span>
+                                </div>
+                              )}
+                              {!stop.arrivedAt && !stop.scheduledAt && (
+                                <p className="text-xs text-gray-400 italic">No timing data yet</p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Connector line between stops */}
+                          {idx < result.stops.length - 1 && (
+                            <div className="flex justify-center mt-2 mb-1">
+                              <div className="flex flex-col items-center gap-1">
+                                <div className="w-px h-3 bg-gray-300" />
+                                <svg className="w-3 h-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
+                                </svg>
+                              </div>
+                            </div>
                           )}
-                          <p className="text-sm font-medium text-gray-700">
-                            {[stop.city, stop.state, stop.zip].filter(Boolean).join(", ")}
-                          </p>
-                          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-                            {stop.scheduledAt && (
-                              <p className="text-xs text-gray-500">
-                                <span className="font-medium">Scheduled:</span> {formatTs(stop.scheduledAt)}
-                              </p>
-                            )}
-                            {stop.arrivedAt && (
-                              <p className="text-xs text-gray-500">
-                                <span className="font-medium">Arrived:</span> {formatTs(stop.arrivedAt)}
-                              </p>
-                            )}
-                            {stop.departedAt && (
-                              <p className="text-xs text-gray-500">
-                                <span className="font-medium">Departed:</span> {formatTs(stop.departedAt)}
-                              </p>
-                            )}
-                          </div>
                         </div>
                       );
                     })}
                   </div>
-                ) : (
-                  /* No stops yet — show location pill */
-                  result.lastLocation && (
-                    <div className="px-6 py-4 border-b border-gray-100">
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Location</p>
-                      <div className="flex items-center gap-2 text-sm text-gray-700">
-                        <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                        </svg>
-                        <span className="font-medium">{result.lastLocation}</span>
-                      </div>
-                    </div>
-                  )
                 )}
 
                 {/* Events timeline */}
-                {result.events.length > 0 && (
-                  <div className="px-6 py-5">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">All Events</p>
-                    <div className="space-y-3">
-                      {result.events.map((ev, idx) => (
-                        <div key={idx} className="flex gap-3 text-sm">
-                          <div className="flex flex-col items-center">
-                            <div className="w-2 h-2 rounded-full bg-[#1a4fa0] mt-1.5 flex-shrink-0" />
-                            {idx < result.events.length - 1 && (
-                              <div className="w-px flex-1 bg-gray-200 my-1 min-h-[12px]" />
-                            )}
-                          </div>
-                          <div className="pb-2 flex-1">
-                            <div className="flex items-start gap-2 flex-wrap">
-                              <p className="text-gray-700 font-medium leading-snug flex-1">
-                                {ev.description !== "(no description)" ? ev.description : "Location Update"}
-                              </p>
-                              {ev.code && (
-                                <span className="text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded flex-shrink-0">
-                                  {ev.code}
-                                </span>
+                {result.events.length > 0 && (() => {
+                  // Sort most recent first
+                  const sorted = [...result.events].sort((a, b) => {
+                    const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+                    const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+                    return tb - ta;
+                  });
+                  const PREVIEW = 5;
+                  const visible = showAllEvents ? sorted : sorted.slice(0, PREVIEW);
+                  const hidden  = sorted.length - PREVIEW;
+
+                  return (
+                    <div className="px-6 py-5">
+                      {/* Header */}
+                      <div className="flex items-center justify-between mb-4">
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                          All Events
+                          <span className="ml-1.5 text-gray-300 font-normal normal-case tracking-normal">
+                            ({result.events.length})
+                          </span>
+                        </p>
+                        {result.events.length > PREVIEW && (
+                          <button
+                            onClick={() => setShowAllEvents(v => !v)}
+                            className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors"
+                          >
+                            {showAllEvents ? "Show less ↑" : `See all ${result.events.length} ↓`}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Event list */}
+                      <div className="space-y-3">
+                        {visible.map((ev, idx) => (
+                          <div key={idx} className="flex gap-3 text-sm">
+                            <div className="flex flex-col items-center">
+                              <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
+                                idx === 0 ? "bg-[#1a4fa0] w-2.5 h-2.5 ring-2 ring-blue-200" : "bg-gray-300"
+                              }`} />
+                              {idx < visible.length - 1 && (
+                                <div className="w-px flex-1 bg-gray-100 my-1 min-h-[12px]" />
                               )}
                             </div>
-                            <p className="text-xs text-gray-400 mt-0.5">{formatTs(ev.timestamp)}</p>
+                            <div className="pb-2 flex-1">
+                              <div className="flex items-start gap-2 flex-wrap">
+                                <p className={`leading-snug flex-1 ${idx === 0 ? "text-gray-900 font-semibold" : "text-gray-600 font-medium"}`}>
+                                  {ev.description !== "(no description)" ? ev.description : "Location Update"}
+                                </p>
+                                {ev.code && (
+                                  <span className="text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded flex-shrink-0">
+                                    {ev.code}
+                                  </span>
+                                )}
+                              </div>
+                              <p className={`text-xs mt-0.5 ${idx === 0 ? "text-blue-600 font-medium" : "text-gray-400"}`}>
+                                {formatTs(ev.timestamp)}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
+
+                      {/* Show more / less button at bottom */}
+                      {result.events.length > PREVIEW && (
+                        <button
+                          onClick={() => setShowAllEvents(v => !v)}
+                          className="mt-4 w-full py-2.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-all"
+                        >
+                          {showAllEvents
+                            ? "↑ Show fewer events"
+                            : `↓ Show ${hidden} more event${hidden !== 1 ? "s" : ""}`}
+                        </button>
+                      )}
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
 
               {/* ── RIGHT PANEL — MAP ── */}
@@ -409,36 +493,51 @@ function TrackingMap({ result }: { result: TrackResult }) {
   const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
   const hasKey   = MAPS_KEY && MAPS_KEY !== "placeholder" && MAPS_KEY !== "YOUR_GOOGLE_MAPS_KEY";
 
-  // Build query — prefer last known lat/lng, fall back to location name, fall back to stops
-  const stops = result.stops;
-  const hasStops = stops.length > 0;
-  const hasLatLng = result.lat && result.lng;
+  const currentLat = result.lat ? parseFloat(result.lat) : null;
+  const currentLng = result.lng ? parseFloat(result.lng) : null;
+  const pings      = result.locationPings ?? [];
+  const hasPosition = currentLat && currentLng;
 
+  // Build Google Maps Static API URL showing route + all pings + current location
   let mapSrc = "";
 
-  if (hasKey) {
-    if (hasLatLng) {
-      // Show current location on map
-      mapSrc = `https://www.google.com/maps/embed/v1/place?key=${MAPS_KEY}&q=${result.lat},${result.lng}&zoom=10`;
-    } else if (hasStops) {
-      const origin      = [stops[0].city, stops[0].state].filter(Boolean).join(", ");
-      const destination = [stops[stops.length-1].city, stops[stops.length-1].state].filter(Boolean).join(", ");
-      const waypoints   = stops.slice(1,-1).map(s => [s.city,s.state].filter(Boolean).join(", ")).filter(Boolean).join("|");
-      mapSrc = `https://www.google.com/maps/embed/v1/directions?key=${MAPS_KEY}&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}${waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : ""}&mode=driving`;
-    } else if (result.lastLocation) {
-      mapSrc = `https://www.google.com/maps/embed/v1/place?key=${MAPS_KEY}&q=${encodeURIComponent(result.lastLocation)}&zoom=10`;
-    }
+  if (hasKey && hasPosition) {
+    const center = `${currentLat},${currentLng}`;
+    
+    // Path of all historical pings
+    const pathPoints = pings
+      .map(p => `${parseFloat(p.lat).toFixed(5)},${parseFloat(p.lng).toFixed(5)}`)
+      .filter(Boolean);
+
+    // Use Maps Embed place for current location (simplest, no billing)
+    mapSrc = `https://www.google.com/maps/embed/v1/place?key=${MAPS_KEY}&q=${encodeURIComponent(result.lastLocation ?? center)}&center=${center}&zoom=11`;
+
+  } else if (hasKey && result.stops.length > 0) {
+    const origin = [result.stops[0].city, result.stops[0].state].filter(Boolean).join(", ");
+    const dest   = [result.stops[result.stops.length-1].city, result.stops[result.stops.length-1].state].filter(Boolean).join(", ");
+    mapSrc = `https://www.google.com/maps/embed/v1/directions?key=${MAPS_KEY}&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&mode=driving`;
+  } else if (hasKey && result.lastLocation) {
+    mapSrc = `https://www.google.com/maps/embed/v1/place?key=${MAPS_KEY}&q=${encodeURIComponent(result.lastLocation)}&zoom=10`;
   }
 
   return (
     <div className="absolute inset-0">
       {/* Map header */}
       <div className="absolute top-0 left-0 right-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-200 px-4 py-2.5 flex items-center justify-between">
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Route Map</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Route Map</span>
+          {pings.length > 0 && (
+            <span className="text-xs text-gray-400">· {pings.length} location pings</span>
+          )}
+        </div>
         {result.lastLocation && (
-          <span className="text-xs text-gray-500">
-            Last known: <span className="font-medium text-gray-700">{result.lastLocation}</span>
-          </span>
+          <div className="flex items-center gap-1.5">
+            {/* Truck icon */}
+            <svg className="w-4 h-4 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M1 3h15v13H1V3zm15 2h3.5L22 9.5V16h-6V5zm-3 13a2 2 0 100-4 2 2 0 000 4zm9 0a2 2 0 100-4 2 2 0 000 4z"/>
+            </svg>
+            <span className="text-xs font-medium text-gray-700">{result.lastLocation}</span>
+          </div>
         )}
       </div>
 
@@ -453,19 +552,15 @@ function TrackingMap({ result }: { result: TrackResult }) {
           title="Shipment Route Map"
         />
       ) : (
-        <div className="absolute inset-0 pt-10 flex flex-col items-center justify-center gap-3 text-gray-400 bg-gray-50">
-          <svg className="w-10 h-10 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+        <div className="absolute inset-0 pt-10 flex flex-col items-center justify-center gap-3 bg-gray-50">
+          <svg className="w-10 h-10 text-gray-300" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+            <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
           </svg>
-          <p className="text-sm font-medium">
-            {result.lastLocation ? `Last known: ${result.lastLocation}` : "No location data available"}
+          <p className="text-sm font-medium text-gray-500">
+            {result.lastLocation ? `Last known: ${result.lastLocation}` : "No location data"}
           </p>
-          {!hasKey && (
-            <p className="text-xs text-gray-400 text-center max-w-xs">
-              Add a Google Maps API key in Vercel environment variables to enable the route map.
-            </p>
-          )}
+          {!hasKey && <p className="text-xs text-gray-400">Add Google Maps API key to enable map</p>}
         </div>
       )}
     </div>

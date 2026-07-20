@@ -72,7 +72,8 @@ export async function POST(req: NextRequest) {
       load.status ??
       "In Transit";
 
-    const stops = (load.stops ?? load.stopDetails ?? load.stopList ?? []).map((s: TTStop, idx: number) => ({
+    const rawStops = load.stops ?? load.stopDetails ?? load.stopList ?? [];
+    const stops = rawStops.map((s: TTStop, idx: number) => ({
       sequence:    s.stopSequence ?? s.sequence ?? s.stopNumber ?? idx,
       type:        s.stopType ?? s.type ?? (idx === 0 ? "PICKUP" : "DELIVERY"),
       address:     s.address ?? s.streetAddress ?? s.location,
@@ -85,7 +86,17 @@ export async function POST(req: NextRequest) {
       departedAt:  s.actualDeparture  ?? s.departedAt  ?? s.leftAt,
     }));
 
+    // Extract location pings from events — must declare rawEvents first
     const rawEvents = load.events ?? load.allEvents ?? load.trackingEvents ?? load.eventList ?? [];
+
+    const locationPings = rawEvents
+      .filter((e: TTEvent) => e.status?.location?.lat && e.status?.location?.lon)
+      .map((e: TTEvent) => ({
+        lat: e.status!.location!.lat,
+        lng: e.status!.location!.lon,
+        timestamp: e.status?.timestamp ?? e.status?.timestampSec,
+      }));
+
     const events = rawEvents.map((e: TTEvent) => ({
       // status.name is the human-readable event description per TT docs
       description: e.status?.name ?? e.status?.code
@@ -113,6 +124,7 @@ export async function POST(req: NextRequest) {
       stops,
       events,
       pings:  load.pings ?? load.locationHistory ?? [],
+      locationPings,
     });
 
   } catch (err) {
