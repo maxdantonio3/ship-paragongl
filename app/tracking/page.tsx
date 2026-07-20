@@ -21,6 +21,8 @@ interface TrackEvent {
   timestamp: string;
   lat?: number;
   lng?: number;
+  code?: string;
+  stopNumber?: number;
 }
 
 interface TrackResult {
@@ -285,63 +287,63 @@ export default function TrackingPage() {
                   )}
                 </div>
 
-                {/* Stops */}
-                {result.stops.length > 0 && (
-                  <div className="px-6 py-5 border-b border-gray-100">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">Stops</p>
-                    <div className="space-y-4">
-                      {result.stops.map((stop, idx) => (
-                        <div key={idx} className="flex gap-4">
-                          {/* Stop indicator */}
-                          <div className="flex flex-col items-center">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${
-                              stop.type?.toLowerCase().includes("pickup") ? "bg-[#1a4fa0]" : "bg-[#e07b2b]"
-                            }`}>
+                {/* Pickup & Delivery cards */}
+                {result.stops.length > 0 ? (
+                  <div className="px-6 py-5 border-b border-gray-100 space-y-3">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Shipment Route</p>
+                    {result.stops.map((stop, idx) => {
+                      const isPickup = stop.type?.toLowerCase().includes("pickup") || idx === 0;
+                      return (
+                        <div key={idx} className={`rounded-lg border p-4 ${isPickup ? "border-blue-100 bg-blue-50" : "border-orange-100 bg-orange-50"}`}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white ${isPickup ? "bg-[#1a4fa0]" : "bg-[#e07b2b]"}`}>
                               {String.fromCharCode(65 + idx)}
                             </div>
-                            {idx < result.stops.length - 1 && (
-                              <div className="w-px flex-1 bg-gray-200 my-1 min-h-[16px]" />
+                            <span className={`text-xs font-bold uppercase tracking-wide ${isPickup ? "text-blue-700" : "text-orange-700"}`}>
+                              {isPickup ? "Pickup" : "Delivery"}
+                            </span>
+                          </div>
+                          {stop.address && (
+                            <p className="text-sm font-semibold text-gray-800">{stop.address}</p>
+                          )}
+                          <p className="text-sm font-medium text-gray-700">
+                            {[stop.city, stop.state, stop.zip].filter(Boolean).join(", ")}
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                            {stop.scheduledAt && (
+                              <p className="text-xs text-gray-500">
+                                <span className="font-medium">Scheduled:</span> {formatTs(stop.scheduledAt)}
+                              </p>
+                            )}
+                            {stop.arrivedAt && (
+                              <p className="text-xs text-gray-500">
+                                <span className="font-medium">Arrived:</span> {formatTs(stop.arrivedAt)}
+                              </p>
+                            )}
+                            {stop.departedAt && (
+                              <p className="text-xs text-gray-500">
+                                <span className="font-medium">Departed:</span> {formatTs(stop.departedAt)}
+                              </p>
                             )}
                           </div>
-
-                          {/* Stop details */}
-                          <div className="pb-4 flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className={`text-xs font-semibold uppercase tracking-wide ${
-                                stop.type?.toLowerCase().includes("pickup") ? "text-blue-600" : "text-orange-600"
-                              }`}>
-                                {stop.type ?? "Stop"}
-                              </span>
-                            </div>
-                            {stop.address && <p className="text-sm font-medium text-gray-800 truncate">{stop.address}</p>}
-                            <p className="text-sm text-gray-600">
-                              {[stop.city, stop.state, stop.zip].filter(Boolean).join(", ")}
-                            </p>
-                            <div className="mt-2 space-y-0.5">
-                              {stop.scheduledAt && (
-                                <p className="text-xs text-gray-400">
-                                  <span className="font-medium text-gray-500">Scheduled:</span>{" "}
-                                  {formatTs(stop.scheduledAt)}
-                                </p>
-                              )}
-                              {stop.arrivedAt && (
-                                <p className="text-xs text-gray-400">
-                                  <span className="font-medium text-gray-500">Arrived:</span>{" "}
-                                  {formatTs(stop.arrivedAt)}
-                                </p>
-                              )}
-                              {stop.departedAt && (
-                                <p className="text-xs text-gray-400">
-                                  <span className="font-medium text-gray-500">Departed:</span>{" "}
-                                  {formatTs(stop.departedAt)}
-                                </p>
-                              )}
-                            </div>
-                          </div>
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })}
                   </div>
+                ) : (
+                  /* No stops yet — show location pill */
+                  result.lastLocation && (
+                    <div className="px-6 py-4 border-b border-gray-100">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Location</p>
+                      <div className="flex items-center gap-2 text-sm text-gray-700">
+                        <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                        <span className="font-medium">{result.lastLocation}</span>
+                      </div>
+                    </div>
+                  )
                 )}
 
                 {/* Events timeline */}
@@ -358,7 +360,16 @@ export default function TrackingPage() {
                             )}
                           </div>
                           <div className="pb-2 flex-1">
-                            <p className="text-gray-700 font-medium leading-snug">{ev.description}</p>
+                            <div className="flex items-start gap-2 flex-wrap">
+                              <p className="text-gray-700 font-medium leading-snug flex-1">
+                                {ev.description !== "(no description)" ? ev.description : "Location Update"}
+                              </p>
+                              {ev.code && (
+                                <span className="text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded flex-shrink-0">
+                                  {ev.code}
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs text-gray-400 mt-0.5">{formatTs(ev.timestamp)}</p>
                           </div>
                         </div>

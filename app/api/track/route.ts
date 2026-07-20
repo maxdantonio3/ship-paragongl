@@ -72,24 +72,33 @@ export async function POST(req: NextRequest) {
       load.status ??
       "In Transit";
 
-    const stops = (load.stops ?? []).map((s: TTStop) => ({
-      sequence:    s.stopSequence ?? s.sequence,
-      type:        s.stopType     ?? s.type ?? "STOP",
-      address:     s.address,
-      city:        s.city,
-      state:       s.state,
-      zip:         s.zip,
-      scheduledAt: s.scheduledArrival ?? s.scheduledAt ?? s.appointmentTime,
-      arrivedAt:   s.actualArrival    ?? s.arrivedAt,
-      departedAt:  s.actualDeparture  ?? s.departedAt,
+    const stops = (load.stops ?? load.stopDetails ?? load.stopList ?? []).map((s: TTStop, idx: number) => ({
+      sequence:    s.stopSequence ?? s.sequence ?? s.stopNumber ?? idx,
+      type:        s.stopType ?? s.type ?? (idx === 0 ? "PICKUP" : "DELIVERY"),
+      address:     s.address ?? s.streetAddress ?? s.location,
+      city:        s.city    ?? s.stopCity,
+      state:       s.state   ?? s.stopState,
+      zip:         s.zip     ?? s.stopZip ?? s.postalCode,
+      scheduledAt: s.scheduledArrival ?? s.scheduledAt ?? s.appointmentTime
+                ?? s.scheduledTime    ?? s.apptTime,
+      arrivedAt:   s.actualArrival    ?? s.arrivedAt   ?? s.enteredAt,
+      departedAt:  s.actualDeparture  ?? s.departedAt  ?? s.leftAt,
     }));
 
-    const rawEvents = load.events ?? load.allEvents ?? load.trackingEvents ?? [];
+    const rawEvents = load.events ?? load.allEvents ?? load.trackingEvents ?? load.eventList ?? [];
     const events = rawEvents.map((e: TTEvent) => ({
-      description: e.eventDescription ?? e.eventType ?? e.description ?? e.event ?? e.status ?? e.statusDescription ?? "(no description)",
-      timestamp:   e.eventTime ?? e.eventTimestamp ?? e.timestamp ?? e.time ?? e.createdAt,
-      lat:         e.latitude  ?? e.lat  ?? null,
-      lng:         e.longitude ?? e.lon  ?? null,
+      // status.name is the human-readable event description per TT docs
+      description: e.status?.name ?? e.status?.code
+                ?? e.eventType ?? e.eventDescription ?? e.eventName
+                ?? e.description ?? e.event ?? e.name
+                ?? e.action ?? "(no description)",
+      timestamp:   e.status?.timestamp ?? e.status?.timestampSec
+                ?? e.eventTime ?? e.eventTimestamp ?? e.eventDate
+                ?? e.timestamp ?? e.time ?? e.createdAt ?? e.dateTime,
+      lat:         e.status?.location?.lat ?? e.latitude ?? e.lat ?? null,
+      lng:         e.status?.location?.lon ?? e.longitude ?? e.lon ?? null,
+      stopNumber:  e.status?.stopOrderNumber ?? null,
+      code:        e.status?.code ?? null,
     }));
 
     return NextResponse.json({
@@ -131,20 +140,39 @@ interface TTLoad {
     city?: string; state?: string; country?: string;
     driver?: { name?: string | null; phoneNumber?: string };
   };
-  stops?: TTStop[]; events?: TTEvent[]; allEvents?: TTEvent[];
-  trackingEvents?: TTEvent[]; pings?: unknown[]; locationHistory?: unknown[];
+  stops?: TTStop[]; stopDetails?: TTStop[]; stopList?: TTStop[];
+  events?: TTEvent[]; allEvents?: TTEvent[]; trackingEvents?: TTEvent[]; eventList?: TTEvent[];
+  pings?: unknown[]; locationHistory?: unknown[];
 }
 interface TTStop {
-  stopSequence?: number; sequence?: number; stopType?: string; type?: string;
-  address?: string; city?: string; state?: string; zip?: string;
+  stopSequence?: number; sequence?: number; stopNumber?: number;
+  stopType?: string; type?: string;
+  address?: string; streetAddress?: string; location?: string;
+  city?: string; stopCity?: string;
+  state?: string; stopState?: string;
+  zip?: string; stopZip?: string; postalCode?: string;
   scheduledArrival?: string; scheduledAt?: string; appointmentTime?: string;
-  actualArrival?: string; arrivedAt?: string;
-  actualDeparture?: string; departedAt?: string;
+  scheduledTime?: string; apptTime?: string;
+  actualArrival?: string; arrivedAt?: string; enteredAt?: string;
+  actualDeparture?: string; departedAt?: string; leftAt?: string;
+}
+interface TTEventStatus {
+  id?: number;
+  name?: string;
+  code?: string;
+  timestamp?: string;
+  timestampSec?: string;
+  timestampUTC?: string;
+  stopOrderNumber?: number;
+  stopExternalId?: string;
+  location?: { lat?: string; lon?: string; accuracy?: number };
+  extras?: { n?: string; v?: string };
 }
 interface TTEvent {
-  eventDescription?: string; eventType?: string; description?: string;
-  event?: string; status?: string; statusDescription?: string;
-  eventTime?: string; eventTimestamp?: string; timestamp?: string;
-  time?: string; createdAt?: string;
+  status?: TTEventStatus;
+  eventType?: string; eventName?: string; eventDescription?: string;
+  description?: string; event?: string; name?: string; action?: string;
+  eventTime?: string; eventTimestamp?: string; eventDate?: string;
+  timestamp?: string; time?: string; createdAt?: string; dateTime?: string;
   latitude?: number; lat?: number; longitude?: number; lon?: number;
 }
