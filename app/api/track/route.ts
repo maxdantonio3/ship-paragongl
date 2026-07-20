@@ -89,13 +89,37 @@ export async function POST(req: NextRequest) {
     // Extract location pings from events — must declare rawEvents first
     const rawEvents = load.events ?? load.allEvents ?? load.trackingEvents ?? load.eventList ?? [];
 
-    const locationPings = rawEvents
+    // TruckerTools stores pings in multiple places — try them all
+    // 1. Dedicated locations/pings array on the load
+    const rawPings: TTLocationPing[] =
+      load.locations ?? load.pings ?? load.locationHistory ?? load.locationPings ?? [];
+
+    // 2. Extract from events that carry a location
+    const eventPings: TTLocationPing[] = rawEvents
       .filter((e: TTEvent) => e.status?.location?.lat && e.status?.location?.lon)
       .map((e: TTEvent) => ({
-        lat: e.status!.location!.lat,
-        lng: e.status!.location!.lon,
-        timestamp: e.status?.timestamp ?? e.status?.timestampSec,
+        lat:       e.status!.location!.lat!,
+        lon:       e.status!.location!.lon!,
+        timestamp: e.status?.timestampSec ?? e.status?.timestamp,
       }));
+
+    // Merge and deduplicate by timestamp, sort chronologically
+    const allPings: TTLocationPing[] = [...rawPings, ...eventPings];
+    const seen = new Set<string>();
+    const locationPings = allPings
+      .filter(p => {
+        if (!p.lat || !p.lon) return false;
+        const key = `${p.lat},${p.lon}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .sort((a, b) => {
+        const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return ta - tb;
+      })
+      .map(p => ({ lat: String(p.lat), lng: String(p.lon ?? p.lng), timestamp: p.timestamp }));
 
     const events = rawEvents.map((e: TTEvent) => ({
       // status.name is the human-readable event description per TT docs
@@ -142,6 +166,15 @@ interface TTResponse {
   timestamp?: string;
   details?:   TTLoad[];
 }
+interface TTLocationPing {
+  lat?: string | number;
+  lon?: string | number;
+  lng?: string | number;
+  timestamp?: string;
+  timestampSec?: string;
+  accuracy?: number;
+}
+
 interface TTLoad {
   loadNumber?: string; shipperLoadNumber?: string; shipperLoadId?: string;
   status?: string;
@@ -154,7 +187,8 @@ interface TTLoad {
   };
   stops?: TTStop[]; stopDetails?: TTStop[]; stopList?: TTStop[];
   events?: TTEvent[]; allEvents?: TTEvent[]; trackingEvents?: TTEvent[]; eventList?: TTEvent[];
-  pings?: unknown[]; locationHistory?: unknown[];
+  locations?: TTLocationPing[]; pings?: TTLocationPing[];
+  locationHistory?: TTLocationPing[]; locationPings?: TTLocationPing[];
 }
 interface TTStop {
   stopSequence?: number; sequence?: number; stopNumber?: number;

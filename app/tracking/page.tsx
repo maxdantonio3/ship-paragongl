@@ -493,72 +493,191 @@ function TrackingMap({ result }: { result: TrackResult }) {
   const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
   const hasKey   = MAPS_KEY && MAPS_KEY !== "placeholder" && MAPS_KEY !== "YOUR_GOOGLE_MAPS_KEY";
 
+  const pings   = result.locationPings ?? [];
   const currentLat = result.lat ? parseFloat(result.lat) : null;
   const currentLng = result.lng ? parseFloat(result.lng) : null;
-  const pings      = result.locationPings ?? [];
 
-  // Build a Google Maps Static API URL showing full ping trail + current pin
-  // Static Maps is included in Maps JavaScript API billing and supports polylines + markers
-  let mapSrc = "";
+  // Build an HTML page that uses the Maps JS API — interactive, zoomable, pannable
+  const buildMapHtml = () => {
+    if (!hasKey) return null;
 
-  if (hasKey) {
     const center = currentLat && currentLng
-      ? `${currentLat},${currentLng}`
-      : result.stops[0]
-        ? `${result.stops[0].city},${result.stops[0].state}`
-        : result.lastLocation ?? "Orlando,FL";
+      ? { lat: currentLat, lng: currentLng }
+      : result.stops[0]?.city
+        ? null  // will geocode
+        : { lat: 28.5383, lng: -81.3792 }; // Orlando default
 
-    const zoom = 9;
-    const size = "1200x800";
-    const scale = 2;
+    // Build JS arrays for pings and stops
+    const pingArray = pings
+      .map(p => `{lat:${parseFloat(p.lat)},lng:${parseFloat(p.lng)}}`)
+      .join(",");
 
-    // Build path from all pings (polyline)
-    const pathCoords = pings.length > 0
-      ? pings.map(p => `${parseFloat(p.lat).toFixed(5)},${parseFloat(p.lng).toFixed(5)}`).join("|")
-      : "";
+    const stopA = result.stops[0];
+    const stopB = result.stops[result.stops.length - 1];
 
-    // Historical ping markers — small gray dots
-    const pingMarkers = pings.length > 1
-      ? pings.slice(0, -1) // all except last (last = current)
-          .map(p => `markers=color:0x1a4fa0|size:tiny|${parseFloat(p.lat).toFixed(5)},${parseFloat(p.lng).toFixed(5)}`)
-          .join("&")
-      : "";
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    html,body,#map{height:100%;margin:0;padding:0}
+    .legend{position:absolute;bottom:28px;left:8px;background:rgba(255,255,255,.92);
+      backdrop-filter:blur(4px);border-radius:8px;padding:10px 14px;font-size:12px;
+      font-family:sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.15);line-height:1.8;z-index:10}
+    .legend-row{display:flex;align-items:center;gap:8px;color:#374151}
+    .dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+  </style>
+</head>
+<body>
+<div id="map"></div>
+<div class="legend">
+  <div class="legend-row"><div class="dot" style="background:#dc2626"></div> Current location</div>
+  <div class="legend-row"><div class="dot" style="background:#1a4fa0"></div> Ping trail</div>
+  ${stopA ? `<div class="legend-row"><div class="dot" style="background:#1d4ed8;font-size:8px;color:#fff;display:flex;align-items:center;justify-content:center">A</div> Pickup</div>` : ""}
+  ${stopB && result.stops.length > 1 ? `<div class="legend-row"><div class="dot" style="background:#ea580c;font-size:8px;color:#fff;display:flex;align-items:center;justify-content:center">B</div> Delivery</div>` : ""}
+</div>
+<script>
+let map, geocoder;
+const pings = [${pingArray}];
+const currentPos = ${currentLat && currentLng ? `{lat:${currentLat},lng:${currentLng}}` : 'null'};
+const stopA = ${stopA ? JSON.stringify({address: stopA.address, city: stopA.city, state: stopA.state, zip: stopA.zip}) : 'null'};
+const stopB = ${stopB && result.stops.length > 1 ? JSON.stringify({address: stopB.address, city: stopB.city, state: stopB.state, zip: stopB.zip}) : 'null'};
 
-    // Current location — large red pin
-    const currentMarker = currentLat && currentLng
-      ? `markers=color:red|size:mid|label:T|${currentLat},${currentLng}`
-      : "";
+function initMap() {
+  const center = currentPos ?? (pings.length ? pings[pings.length-1] : {lat:28.5383,lng:-81.3792});
+  const zoom   = pings.length > 5 ? 7 : 10;
 
-    // Stop A marker
-    const stopAMarker = result.stops[0]?.city
-      ? `markers=color:blue|size:mid|label:A|${result.stops[0].address ?? `${result.stops[0].city},${result.stops[0].state}`}`
-      : "";
+  map = new google.maps.Map(document.getElementById("map"), {
+    center, zoom,
+    mapTypeId: "roadmap",
+    mapTypeControl: true,
+    zoomControl: true,
+    streetViewControl: false,
+    fullscreenControl: true,
+    styles: [{featureType:"poi",elementType:"labels",stylers:[{visibility:"off"}]}]
+  });
 
-    // Stop B marker
-    const stopBMarker = result.stops[1]?.city
-      ? `markers=color:orange|size:mid|label:B|${result.stops[1].address ?? `${result.stops[1].city},${result.stops[1].state}`}`
-      : "";
+  // Draw ping trail polyline
+  if (pings.length > 1) {
+    new google.maps.Polyline({
+      path: pings,
+      geodesic: true,
+      strokeColor: "#1a4fa0",
+      strokeOpacity: 0.85,
+      strokeWeight: 3,
+      map
+    });
 
-    const pathParam = pathCoords
-      ? `path=color:0x1a4fa0CC|weight:3|${pathCoords}`
-      : "";
-
-    const params = [
-      `key=${MAPS_KEY}`,
-      `center=${encodeURIComponent(center)}`,
-      `zoom=${zoom}`,
-      `size=${size}`,
-      `scale=${scale}`,
-      `maptype=roadmap`,
-      pathParam,
-      pingMarkers,
-      currentMarker,
-      stopAMarker,
-      stopBMarker,
-    ].filter(Boolean).join("&");
-
-    mapSrc = `https://maps.googleapis.com/maps/api/staticmap?${params}`;
+    // Small dots for each historical ping
+    pings.slice(0, -1).forEach(p => {
+      new google.maps.Circle({
+        center: p,
+        radius: 800,
+        strokeColor: "#1a4fa0",
+        strokeOpacity: 0.6,
+        strokeWeight: 1,
+        fillColor: "#1a4fa0",
+        fillOpacity: 0.5,
+        map
+      });
+    });
   }
+
+  // Current location — large red pin
+  if (currentPos) {
+    new google.maps.Marker({
+      position: currentPos,
+      map,
+      title: "Current Location",
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 10,
+        fillColor: "#dc2626",
+        fillOpacity: 1,
+        strokeColor: "#ffffff",
+        strokeWeight: 3,
+      },
+      zIndex: 999
+    });
+
+    // Pulse ring around current location
+    new google.maps.Circle({
+      center: currentPos,
+      radius: 2500,
+      strokeColor: "#dc2626",
+      strokeOpacity: 0.4,
+      strokeWeight: 2,
+      fillColor: "#dc2626",
+      fillOpacity: 0.1,
+      map
+    });
+  }
+
+  // Stop A marker — blue
+  if (stopA) {
+    const addr = [stopA.address, stopA.city, stopA.state, stopA.zip].filter(Boolean).join(", ");
+    geocoder = new google.maps.Geocoder();
+    geocoder.geocode({address: addr}, (results, status) => {
+      if (status === "OK" && results[0]) {
+        new google.maps.Marker({
+          position: results[0].geometry.location,
+          map,
+          label: {text:"A", color:"#fff", fontWeight:"bold", fontSize:"11px"},
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 13,
+            fillColor: "#1d4ed8",
+            fillOpacity: 1,
+            strokeColor: "#ffffff",
+            strokeWeight: 2,
+          },
+          title: "Pickup: " + addr,
+          zIndex: 100
+        });
+      }
+    });
+  }
+
+  // Stop B marker — orange
+  if (stopB) {
+    const addr = [stopB.address, stopB.city, stopB.state, stopB.zip].filter(Boolean).join(", ");
+    if (!geocoder) geocoder = new google.maps.Geocoder();
+    geocoder.geocode({address: addr}, (results, status) => {
+      if (status === "OK" && results[0]) {
+        new google.maps.Marker({
+          position: results[0].geometry.location,
+          map,
+          label: {text:"B", color:"#fff", fontWeight:"bold", fontSize:"11px"},
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 13,
+            fillColor: "#ea580c",
+            fillOpacity: 1,
+            strokeColor: "#ffffff",
+            strokeWeight: 2,
+          },
+          title: "Delivery: " + addr,
+          zIndex: 100
+        });
+      }
+    });
+  }
+
+  // Auto-fit bounds to show full route
+  if (pings.length > 1) {
+    const bounds = new google.maps.LatLngBounds();
+    pings.forEach(p => bounds.extend(p));
+    if (currentPos) bounds.extend(currentPos);
+    map.fitBounds(bounds, {top:20, right:20, bottom:50, left:20});
+  }
+}
+<\/script>
+<script src="https://maps.googleapis.com/maps/api/js?key=${MAPS_KEY}&callback=initMap" async defer></script>
+</body>
+</html>`;
+  };
+
+  const mapHtml = buildMapHtml();
 
   return (
     <div className="absolute inset-0">
@@ -567,7 +686,7 @@ function TrackingMap({ result }: { result: TrackResult }) {
         <div className="flex items-center gap-3">
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Route Map</span>
           {pings.length > 0 && (
-            <span className="text-xs text-gray-400">{pings.length} pings recorded</span>
+            <span className="text-xs text-gray-400">{pings.length} pings</span>
           )}
         </div>
         {result.lastLocation && (
@@ -580,51 +699,14 @@ function TrackingMap({ result }: { result: TrackResult }) {
         )}
       </div>
 
-      {/* Legend */}
-      {hasKey && (
-        <div className="absolute bottom-4 left-4 z-10 bg-white/90 backdrop-blur-sm rounded-lg shadow-sm border border-gray-200 px-3 py-2 flex flex-col gap-1.5">
-          <div className="flex items-center gap-2 text-xs text-gray-600">
-            <span className="w-3 h-3 rounded-full bg-red-500 flex-shrink-0" />
-            Current location
-          </div>
-          <div className="flex items-center gap-2 text-xs text-gray-600">
-            <span className="w-3 h-3 rounded-full bg-[#1a4fa0] flex-shrink-0" />
-            Ping trail
-          </div>
-          {result.stops[0] && (
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <span className="w-3 h-3 rounded-full bg-blue-600 flex-shrink-0 flex items-center justify-center text-white" style={{fontSize:'7px'}}>A</span>
-              Pickup
-            </div>
-          )}
-          {result.stops[1] && (
-            <div className="flex items-center gap-2 text-xs text-gray-600">
-              <span className="w-3 h-3 rounded-full bg-orange-500 flex-shrink-0" />
-              Delivery
-            </div>
-          )}
-        </div>
-      )}
-
-      {mapSrc ? (
-        // Static Maps — shows full ping trail + markers
-        <div className="absolute inset-0 pt-10 overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={mapSrc}
-            alt="Shipment route map"
-            className="w-full h-full object-cover object-center"
-            onError={(e) => {
-              // Fallback to embed if static map fails
-              const target = e.currentTarget;
-              target.style.display = "none";
-              const parent = target.parentElement;
-              if (parent) {
-                parent.innerHTML = `<div class="flex items-center justify-center h-full text-gray-400 text-sm">Map unavailable — check your API key has Static Maps enabled</div>`;
-              }
-            }}
-          />
-        </div>
+      {mapHtml ? (
+        <iframe
+          className="absolute inset-0 w-full h-full pt-10"
+          style={{ border: 0 }}
+          srcDoc={mapHtml}
+          title="Shipment Route Map"
+          sandbox="allow-scripts allow-same-origin"
+        />
       ) : (
         <div className="absolute inset-0 pt-10 flex flex-col items-center justify-center gap-3 bg-gray-50">
           <svg className="w-10 h-10 text-gray-300" viewBox="0 0 24 24" fill="currentColor">
