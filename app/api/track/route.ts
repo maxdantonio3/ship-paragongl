@@ -3,10 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 const PARTNER_ID = process.env.TT_PARTNER_ID!;
 const ACCOUNT_ID = process.env.TT_ACCOUNT_ID!;
 
-// Exact URLs from TruckerTools API docs v1.1.2
-const TT_BASE = "https://loadtracking.truckertools.com";
-const BY_EXTERNAL_ID  = `${TT_BASE}/loadtrackservice/getLoadTrackDetailsServiceV2`;
-const BY_LOAD_NUMBER  = `${TT_BASE}/loadtrackservice/getLoadTrackDetailsServiceByLoadNumber`;
+const BY_LOAD_NUMBER = "https://loadtracking.truckertools.com/loadtrackservice/getLoadTrackDetailsServiceByLoadNumber";
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,97 +15,98 @@ export async function POST(req: NextRequest) {
 
     const id = loadNumber.trim();
 
-    // Try by external ID first, then by load number
-    const attempts = [
-      {
-        url:  BY_EXTERNAL_ID,
-        body: { partnerId: PARTNER_ID, accountId: ACCOUNT_ID, externalIds: [id] },
-        label: "by external ID",
-      },
-      {
-        url:  BY_LOAD_NUMBER,
-        body: { partnerId: PARTNER_ID, accountId: ACCOUNT_ID, loadNumbers: [id] },
-        label: "by load number",
-      },
-    ];
+    const body = {
+      partnerId:        Number(PARTNER_ID),   // int64 per docs
+      accountId:        ACCOUNT_ID,
+      loadNumbers:      [id],
+      sendNewData:      "no",                 // "no" = return ALL updates
+      includeLocations: true,
+      includeEvents:    true,
+      includeDocuments: true,
+      includeComments:  true,
+    };
 
-    const debugLines: string[] = [];
+    console.log("[track] POST", BY_LOAD_NUMBER, JSON.stringify(body));
 
-    for (const attempt of attempts) {
-      console.log(`[track] Trying ${attempt.label}:`, attempt.url);
+    const res = await fetch(BY_LOAD_NUMBER, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
 
-      const res = await fetch(attempt.url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(attempt.body),
-      });
+    const text = await res.text();
+    console.log("[track] status:", res.status, "body:", text.slice(0, 600));
 
-      const text = await res.text();
-      console.log(`[track] ${attempt.label} → ${res.status}: ${text.slice(0, 300)}`);
-      debugLines.push(`${attempt.label} (${res.status}): ${text.slice(0, 400)}`);
-
-      // Only try to parse if it looks like JSON
-      const isJson = res.headers.get("content-type")?.includes("json")
-        || text.trim().startsWith("{")
-        || text.trim().startsWith("[");
-
-      if (!isJson) continue;
-
-      let data: unknown;
-      try { data = JSON.parse(text); } catch { continue; }
-
-      // TruckerTools may wrap results in different keys — try all common ones
-      const loads: TruckerLoad[] = Array.isArray(data)
-        ? data
-        : ((data as Record<string, unknown>)?.loadTracks
-          ?? (data as Record<string, unknown>)?.loads
-          ?? (data as Record<string, unknown>)?.results
-          ?? []) as TruckerLoad[];
-
-      const load = loads[0] ?? null;
-
-      // If single object returned directly
-      const single = (!Array.isArray(data) && (data as TruckerLoad)?.loadNumber)
-        ? data as TruckerLoad
-        : null;
-
-      const src = load ?? single;
-      if (!src) continue;
-
-      return NextResponse.json({
-        loadNumber:    src.loadNumber   ?? src.externalId ?? id,
-        shipperLoadId: src.shipperLoadId ?? null,
-        status:        src.latestStatus  ?? src.status ?? "Unknown",
-        lastUpdated:   src.lastUpdated   ?? null,
-        lastLocation:  src.lastLocation  ?? null,
-        stops: (src.stops ?? []).map((s: TruckerStop) => ({
-          sequence:    s.stopSequence ?? s.sequence,
-          type:        s.stopType     ?? s.type,
-          address:     s.address,
-          city:        s.city,
-          state:       s.state,
-          zip:         s.zip,
-          scheduledAt: s.scheduledArrival ?? s.scheduledAt,
-          arrivedAt:   s.actualArrival    ?? s.arrivedAt,
-          departedAt:  s.actualDeparture  ?? s.departedAt,
-        })),
-        events: (src.events ?? src.allEvents ?? []).map((e: TruckerEvent) => ({
-          description: e.eventDescription ?? e.description,
-          timestamp:   e.eventTime        ?? e.timestamp,
-          lat:         e.latitude  ?? null,
-          lng:         e.longitude ?? null,
-        })),
-        pings: src.pings ?? src.locationHistory ?? [],
-      });
+    let data: TTResponse;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return NextResponse.json(
+        { error: `Invalid response from tracking service: ${text.slice(0, 300)}` },
+        { status: 502 }
+      );
     }
 
-    return NextResponse.json(
-      { error: `No tracking data found for "${id}".\n\nDebug:\n${debugLines.join("\n\n")}` },
-      { status: 404 }
-    );
+    if (!data.status) {
+      return NextResponse.json(
+        { error: data.message ?? "Tracking service returned an error." },
+        { status: 502 }
+      );
+    }
+
+    const load = data.details?.[0];
+    if (!load) {
+      return NextResponse.json(
+        { error: `No shipment found for load number "${id}".` },
+        { status: 404 }
+      );
+    }
+
+    const loc = load.latestLocation;
+    const lastLocation = loc ? [loc.city, loc.state].filter(Boolean).join(", ") : null;
+    const lastUpdated  = loc?.timestamp ?? null;
+
+    const status =
+      load.latestStatus?.status ??
+      load.latestStatus?.description ??
+      load.status ??
+      "In Transit";
+
+    const stops = (load.stops ?? []).map((s: TTStop) => ({
+      sequence:    s.stopSequence ?? s.sequence,
+      type:        s.stopType     ?? s.type ?? "STOP",
+      address:     s.address,
+      city:        s.city,
+      state:       s.state,
+      zip:         s.zip,
+      scheduledAt: s.scheduledArrival ?? s.scheduledAt ?? s.appointmentTime,
+      arrivedAt:   s.actualArrival    ?? s.arrivedAt,
+      departedAt:  s.actualDeparture  ?? s.departedAt,
+    }));
+
+    const events = (load.events ?? load.allEvents ?? load.trackingEvents ?? []).map((e: TTEvent) => ({
+      description: e.eventDescription ?? e.description ?? e.event ?? e.status,
+      timestamp:   e.eventTime        ?? e.timestamp   ?? e.time,
+      lat:         e.latitude  ?? e.lat  ?? null,
+      lng:         e.longitude ?? e.lon  ?? null,
+    }));
+
+    return NextResponse.json({
+      loadNumber:    load.loadNumber          ?? id,
+      shipperLoadId: load.shipperLoadNumber   ?? load.shipperLoadId ?? null,
+      status,
+      lastUpdated,
+      lastLocation,
+      lat:    loc?.lat ?? null,
+      lng:    loc?.lon ?? null,
+      driver: loc?.driver ?? null,
+      stops,
+      events,
+      pings:  load.pings ?? load.locationHistory ?? [],
+    });
 
   } catch (err) {
-    console.error("[track] Error:", err);
+    console.error("[track] error:", err);
     return NextResponse.json(
       { error: `Server error: ${err instanceof Error ? err.message : String(err)}` },
       { status: 500 }
@@ -116,21 +114,34 @@ export async function POST(req: NextRequest) {
   }
 }
 
-interface TruckerLoad {
-  loadNumber?: string; externalId?: string; shipperLoadId?: string;
-  latestStatus?: string; status?: string; lastUpdated?: string; lastLocation?: string;
-  stops?: TruckerStop[]; events?: TruckerEvent[]; allEvents?: TruckerEvent[];
-  pings?: unknown[]; locationHistory?: unknown[];
+interface TTResponse {
+  status:     boolean;
+  message?:   string;
+  timestamp?: string;
+  details?:   TTLoad[];
 }
-interface TruckerStop {
+interface TTLoad {
+  loadNumber?: string; shipperLoadNumber?: string; shipperLoadId?: string;
+  status?: string;
+  latestStatus?: { status?: string; description?: string; timestamp?: string };
+  latestLocation?: {
+    lat?: string; lon?: string; accuracy?: number;
+    timestamp?: string; timestampSec?: string; timestampUTC?: string;
+    city?: string; state?: string; country?: string;
+    driver?: { name?: string | null; phoneNumber?: string };
+  };
+  stops?: TTStop[]; events?: TTEvent[]; allEvents?: TTEvent[];
+  trackingEvents?: TTEvent[]; pings?: unknown[]; locationHistory?: unknown[];
+}
+interface TTStop {
   stopSequence?: number; sequence?: number; stopType?: string; type?: string;
   address?: string; city?: string; state?: string; zip?: string;
-  scheduledArrival?: string; scheduledAt?: string;
+  scheduledArrival?: string; scheduledAt?: string; appointmentTime?: string;
   actualArrival?: string; arrivedAt?: string;
   actualDeparture?: string; departedAt?: string;
 }
-interface TruckerEvent {
-  eventDescription?: string; description?: string;
-  eventTime?: string; timestamp?: string;
-  latitude?: number; longitude?: number;
+interface TTEvent {
+  eventDescription?: string; description?: string; event?: string; status?: string;
+  eventTime?: string; timestamp?: string; time?: string;
+  latitude?: number; lat?: number; longitude?: number; lon?: number;
 }
