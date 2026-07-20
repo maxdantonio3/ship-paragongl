@@ -29,6 +29,10 @@ interface TrackResult {
   status: string;
   lastUpdated?: string;
   lastLocation?: string;
+  lat?: string | null;
+  lng?: string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  pings?: any[];
   stops: Stop[];
   events: TrackEvent[];
 }
@@ -390,38 +394,30 @@ export default function TrackingPage() {
   );
 }
 
-// ── Map component using Google Maps Embed (no API key needed for basic embed)
-// For production, swap to @vis.gl/react-google-maps with a proper Maps API key
 function TrackingMap({ result }: { result: TrackResult }) {
-  // Build a Google Maps directions URL from stops
+  const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
+  const hasKey   = MAPS_KEY && MAPS_KEY !== "placeholder" && MAPS_KEY !== "YOUR_GOOGLE_MAPS_KEY";
+
+  // Build query — prefer last known lat/lng, fall back to location name, fall back to stops
   const stops = result.stops;
+  const hasStops = stops.length > 0;
+  const hasLatLng = result.lat && result.lng;
 
-  if (stops.length === 0) {
-    return (
-      <div className="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">
-        No location data available.
-      </div>
-    );
+  let mapSrc = "";
+
+  if (hasKey) {
+    if (hasLatLng) {
+      // Show current location on map
+      mapSrc = `https://www.google.com/maps/embed/v1/place?key=${MAPS_KEY}&q=${result.lat},${result.lng}&zoom=10`;
+    } else if (hasStops) {
+      const origin      = [stops[0].city, stops[0].state].filter(Boolean).join(", ");
+      const destination = [stops[stops.length-1].city, stops[stops.length-1].state].filter(Boolean).join(", ");
+      const waypoints   = stops.slice(1,-1).map(s => [s.city,s.state].filter(Boolean).join(", ")).filter(Boolean).join("|");
+      mapSrc = `https://www.google.com/maps/embed/v1/directions?key=${MAPS_KEY}&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}${waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : ""}&mode=driving`;
+    } else if (result.lastLocation) {
+      mapSrc = `https://www.google.com/maps/embed/v1/place?key=${MAPS_KEY}&q=${encodeURIComponent(result.lastLocation)}&zoom=10`;
+    }
   }
-
-  const origin      = stops[0];
-  const destination = stops[stops.length - 1];
-
-  const originStr      = [origin.city, origin.state].filter(Boolean).join(", ");
-  const destinationStr = [destination.city, destination.state].filter(Boolean).join(", ");
-
-  // Waypoints for intermediate stops
-  const waypoints = stops
-    .slice(1, -1)
-    .map(s => [s.city, s.state].filter(Boolean).join(", "))
-    .filter(Boolean)
-    .join("|");
-
-  const mapSrc = `https://www.google.com/maps/embed/v1/directions?key=${
-    process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? "YOUR_GOOGLE_MAPS_KEY"
-  }&origin=${encodeURIComponent(originStr)}&destination=${encodeURIComponent(destinationStr)}${
-    waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : ""
-  }&mode=driving`;
 
   return (
     <div className="absolute inset-0">
@@ -435,16 +431,32 @@ function TrackingMap({ result }: { result: TrackResult }) {
         )}
       </div>
 
-      {/* Google Maps iframe */}
-      <iframe
-        className="absolute inset-0 w-full h-full pt-10"
-        style={{ border: 0 }}
-        loading="lazy"
-        allowFullScreen
-        referrerPolicy="no-referrer-when-downgrade"
-        src={mapSrc}
-        title="Shipment Route Map"
-      />
+      {mapSrc ? (
+        <iframe
+          className="absolute inset-0 w-full h-full pt-10"
+          style={{ border: 0 }}
+          loading="lazy"
+          allowFullScreen
+          referrerPolicy="no-referrer-when-downgrade"
+          src={mapSrc}
+          title="Shipment Route Map"
+        />
+      ) : (
+        <div className="absolute inset-0 pt-10 flex flex-col items-center justify-center gap-3 text-gray-400 bg-gray-50">
+          <svg className="w-10 h-10 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          <p className="text-sm font-medium">
+            {result.lastLocation ? `Last known: ${result.lastLocation}` : "No location data available"}
+          </p>
+          {!hasKey && (
+            <p className="text-xs text-gray-400 text-center max-w-xs">
+              Add a Google Maps API key in Vercel environment variables to enable the route map.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

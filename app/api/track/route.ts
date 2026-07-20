@@ -84,9 +84,10 @@ export async function POST(req: NextRequest) {
       departedAt:  s.actualDeparture  ?? s.departedAt,
     }));
 
-    const events = (load.events ?? load.allEvents ?? load.trackingEvents ?? []).map((e: TTEvent) => ({
-      description: e.eventDescription ?? e.description ?? e.event ?? e.status,
-      timestamp:   e.eventTime        ?? e.timestamp   ?? e.time,
+    const rawEvents = load.events ?? load.allEvents ?? load.trackingEvents ?? [];
+    const events = rawEvents.map((e: TTEvent) => ({
+      description: e.eventDescription ?? e.eventType ?? e.description ?? e.event ?? e.status ?? e.statusDescription ?? "(no description)",
+      timestamp:   e.eventTime ?? e.eventTimestamp ?? e.timestamp ?? e.time ?? e.createdAt,
       lat:         e.latitude  ?? e.lat  ?? null,
       lng:         e.longitude ?? e.lon  ?? null,
     }));
@@ -141,7 +142,9 @@ interface TTStop {
   actualDeparture?: string; departedAt?: string;
 }
 interface TTEvent {
-  eventDescription?: string; description?: string; event?: string; status?: string;
-  eventTime?: string; timestamp?: string; time?: string;
+  eventDescription?: string; eventType?: string; description?: string;
+  event?: string; status?: string; statusDescription?: string;
+  eventTime?: string; eventTimestamp?: string; timestamp?: string;
+  time?: string; createdAt?: string;
   latitude?: number; lat?: number; longitude?: number; lon?: number;
 }
