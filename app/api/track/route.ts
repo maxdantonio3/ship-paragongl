@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 const PARTNER_ID = process.env.TT_PARTNER_ID!;
 const ACCOUNT_ID = process.env.TT_ACCOUNT_ID!;
-const TT_BASE = "https://developer.truckertools.com/apis/getloadtrackupdates";
+
+// Exact URLs from TruckerTools API docs v1.1.2
+const TT_BASE = "https://loadtracking.truckertools.com";
+const BY_EXTERNAL_ID  = `${TT_BASE}/loadtrackservice/getLoadTrackDetailsServiceV2`;
+const BY_LOAD_NUMBER  = `${TT_BASE}/loadtrackservice/getLoadTrackDetailsServiceByLoadNumber`;
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,82 +18,97 @@ export async function POST(req: NextRequest) {
 
     const id = loadNumber.trim();
 
-    // Try external ID endpoint first (matches TruckerTools Load# field)
-    const payload = {
-      partnerId: PARTNER_ID,
-      accountId: ACCOUNT_ID,
-      externalIds: [id],
-    };
+    // Try by external ID first, then by load number
+    const attempts = [
+      {
+        url:  BY_EXTERNAL_ID,
+        body: { partnerId: PARTNER_ID, accountId: ACCOUNT_ID, externalId: id },
+        label: "by external ID",
+      },
+      {
+        url:  BY_LOAD_NUMBER,
+        body: { partnerId: PARTNER_ID, accountId: ACCOUNT_ID, loadNumber: id },
+        label: "by load number",
+      },
+    ];
 
-    console.log("[track] Request payload:", JSON.stringify(payload));
+    const debugLines: string[] = [];
 
-    const ttRes = await fetch(`${TT_BASE}/externalid`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    for (const attempt of attempts) {
+      console.log(`[track] Trying ${attempt.label}:`, attempt.url);
 
-    const rawText = await ttRes.text();
-    console.log("[track] TruckerTools status:", ttRes.status);
-    console.log("[track] TruckerTools response:", rawText);
+      const res = await fetch(attempt.url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(attempt.body),
+      });
 
-    // Surface the real error to the client so we can debug
-    if (!ttRes.ok) {
-      return NextResponse.json(
-        { error: `Tracking API error (${ttRes.status}): ${rawText}` },
-        { status: 502 }
-      );
+      const text = await res.text();
+      console.log(`[track] ${attempt.label} → ${res.status}: ${text.slice(0, 300)}`);
+      debugLines.push(`${attempt.label} (${res.status}): ${text.slice(0, 400)}`);
+
+      // Only try to parse if it looks like JSON
+      const isJson = res.headers.get("content-type")?.includes("json")
+        || text.trim().startsWith("{")
+        || text.trim().startsWith("[");
+
+      if (!isJson) continue;
+
+      let data: unknown;
+      try { data = JSON.parse(text); } catch { continue; }
+
+      // TruckerTools may wrap results in different keys — try all common ones
+      const loads: TruckerLoad[] = Array.isArray(data)
+        ? data
+        : ((data as Record<string, unknown>)?.loadTracks
+          ?? (data as Record<string, unknown>)?.loads
+          ?? (data as Record<string, unknown>)?.results
+          ?? []) as TruckerLoad[];
+
+      const load = loads[0] ?? null;
+
+      // If single object returned directly
+      const single = (!Array.isArray(data) && (data as TruckerLoad)?.loadNumber)
+        ? data as TruckerLoad
+        : null;
+
+      const src = load ?? single;
+      if (!src) continue;
+
+      return NextResponse.json({
+        loadNumber:    src.loadNumber   ?? src.externalId ?? id,
+        shipperLoadId: src.shipperLoadId ?? null,
+        status:        src.latestStatus  ?? src.status ?? "Unknown",
+        lastUpdated:   src.lastUpdated   ?? null,
+        lastLocation:  src.lastLocation  ?? null,
+        stops: (src.stops ?? []).map((s: TruckerStop) => ({
+          sequence:    s.stopSequence ?? s.sequence,
+          type:        s.stopType     ?? s.type,
+          address:     s.address,
+          city:        s.city,
+          state:       s.state,
+          zip:         s.zip,
+          scheduledAt: s.scheduledArrival ?? s.scheduledAt,
+          arrivedAt:   s.actualArrival    ?? s.arrivedAt,
+          departedAt:  s.actualDeparture  ?? s.departedAt,
+        })),
+        events: (src.events ?? src.allEvents ?? []).map((e: TruckerEvent) => ({
+          description: e.eventDescription ?? e.description,
+          timestamp:   e.eventTime        ?? e.timestamp,
+          lat:         e.latitude  ?? null,
+          lng:         e.longitude ?? null,
+        })),
+        pings: src.pings ?? src.locationHistory ?? [],
+      });
     }
 
-    let data: unknown;
-    try {
-      data = JSON.parse(rawText);
-    } catch {
-      return NextResponse.json(
-        { error: `Unexpected response: ${rawText}` },
-        { status: 502 }
-      );
-    }
+    return NextResponse.json(
+      { error: `No tracking data found for "${id}".\n\nDebug:\n${debugLines.join("\n\n")}` },
+      { status: 404 }
+    );
 
-    const loads = Array.isArray(data) ? data : (data as Record<string, unknown>)?.loads ?? [];
-    const load = (loads as TruckerLoad[])[0] ?? null;
-
-    if (!load) {
-      return NextResponse.json(
-        { error: `No shipment found for load number "${id}". Raw response: ${rawText}` },
-        { status: 404 }
-      );
-    }
-
-    const result = {
-      loadNumber:    load.loadNumber   ?? load.externalId ?? id,
-      shipperLoadId: load.shipperLoadId ?? null,
-      status:        load.latestStatus  ?? load.status ?? "Unknown",
-      lastUpdated:   load.lastUpdated   ?? null,
-      lastLocation:  load.lastLocation  ?? null,
-      stops: (load.stops ?? []).map((s: TruckerStop) => ({
-        sequence:    s.stopSequence ?? s.sequence,
-        type:        s.stopType     ?? s.type,
-        address:     s.address,
-        city:        s.city,
-        state:       s.state,
-        zip:         s.zip,
-        scheduledAt: s.scheduledArrival ?? s.scheduledAt,
-        arrivedAt:   s.actualArrival    ?? s.arrivedAt,
-        departedAt:  s.actualDeparture  ?? s.departedAt,
-      })),
-      events: (load.events ?? load.allEvents ?? []).map((e: TruckerEvent) => ({
-        description: e.eventDescription ?? e.description,
-        timestamp:   e.eventTime        ?? e.timestamp,
-        lat:         e.latitude  ?? null,
-        lng:         e.longitude ?? null,
-      })),
-      pings: load.pings ?? load.locationHistory ?? [],
-    };
-
-    return NextResponse.json(result);
   } catch (err) {
-    console.error("[track] Unexpected error:", err);
+    console.error("[track] Error:", err);
     return NextResponse.json(
       { error: `Server error: ${err instanceof Error ? err.message : String(err)}` },
       { status: 500 }
@@ -97,7 +116,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// ── Types ──
 interface TruckerLoad {
   loadNumber?: string; externalId?: string; shipperLoadId?: string;
   latestStatus?: string; status?: string; lastUpdated?: string; lastLocation?: string;
