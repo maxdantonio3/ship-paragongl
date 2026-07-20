@@ -1,0 +1,450 @@
+"use client";
+
+import { useState, useRef } from "react";
+import Image from "next/image";
+
+// ── Types ──────────────────────────────────────────────
+interface Stop {
+  sequence: number;
+  type: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  scheduledAt?: string;
+  arrivedAt?: string;
+  departedAt?: string;
+}
+
+interface TrackEvent {
+  description: string;
+  timestamp: string;
+  lat?: number;
+  lng?: number;
+}
+
+interface TrackResult {
+  loadNumber: string;
+  shipperLoadId?: string;
+  status: string;
+  lastUpdated?: string;
+  lastLocation?: string;
+  stops: Stop[];
+  events: TrackEvent[];
+}
+
+// ── Helpers ──────────────────────────────────────────────
+function formatTs(ts?: string | null) {
+  if (!ts) return "—";
+  try {
+    return new Date(ts).toLocaleString("en-US", {
+      month: "short", day: "numeric", year: "numeric",
+      hour: "numeric", minute: "2-digit", timeZoneName: "short",
+    });
+  } catch { return ts; }
+}
+
+function statusColor(status: string) {
+  const s = status.toLowerCase();
+  if (s.includes("delivered") || s.includes("complete")) return "bg-green-100 text-green-700 border-green-200";
+  if (s.includes("transit") || s.includes("pickup"))     return "bg-blue-100 text-blue-700 border-blue-200";
+  if (s.includes("delay") || s.includes("issue"))        return "bg-red-100 text-red-700 border-red-200";
+  return "bg-orange-100 text-orange-700 border-orange-200";
+}
+
+// ── Component ──────────────────────────────────────────────
+export default function TrackingPage() {
+  const [loadNumber, setLoadNumber]   = useState("");
+  const [loading, setLoading]         = useState(false);
+  const [error, setError]             = useState<string | null>(null);
+  const [result, setResult]           = useState<TrackResult | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  async function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    const val = loadNumber.trim();
+    if (!val) { inputRef.current?.focus(); return; }
+
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      const res  = await fetch("/api/track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ loadNumber: val }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Unknown error");
+      setResult(data);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleReset() {
+    setResult(null);
+    setError(null);
+    setLoadNumber("");
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col">
+
+      {/* ── NAV ── */}
+      <nav className="bg-[#0d1b2e] border-b border-white/10 h-14 flex items-center px-6 justify-between z-10 relative">
+        <div className="flex items-center">
+          <Image
+            src="/logo-full.png"
+            alt="Paragon Global Logistics"
+            width={148}
+            height={44}
+            className="h-9 w-auto"
+            priority
+          />
+        </div>
+        <div className="flex items-center gap-5 text-sm text-white/60">
+          <a href="tel:4078532923" className="hover:text-white transition-colors">(407) 853-2923</a>
+          <a href="https://os.paragongl.com/login" target="_blank" className="hover:text-white transition-colors">Staff Login</a>
+        </div>
+      </nav>
+
+      {/* ── MAIN ── */}
+      <main className="flex-1 relative overflow-hidden bg-[#0d1b2e]">
+
+        {/* Globe watermark — like C.H. Robinson */}
+        <div
+          className="absolute inset-0 pointer-events-none select-none z-0"
+          aria-hidden
+        >
+          <div
+            className="absolute right-[-8%] top-[-10%] w-[65%] aspect-square opacity-[0.07]"
+            style={{
+              backgroundImage: "url('/globe.png')",
+              backgroundSize:  "contain",
+              backgroundRepeat:"no-repeat",
+              backgroundPosition:"center",
+            }}
+          />
+        </div>
+
+        {/* ── SEARCH STATE ── */}
+        {!result && (
+          <div className="relative z-10 flex items-center justify-center min-h-[calc(100vh-56px)] px-4">
+            <div className="w-full max-w-md">
+
+              {/* Card */}
+              <div className="bg-white rounded-2xl shadow-2xl shadow-black/30 p-8 md:p-10">
+
+                {/* Header */}
+                <div className="text-center mb-8">
+                  <div className="flex items-center justify-center mb-4">
+                    <Image
+                      src="/logo-full.png"
+                      alt="Paragon Global Logistics"
+                      width={180}
+                      height={53}
+                      className="h-10 w-auto"
+                    />
+                  </div>
+                  <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                    Tracking starts here
+                  </h1>
+                  <p className="text-gray-500 text-sm leading-relaxed">
+                    Enter your Paragon load number to get instant real-time shipment tracking.
+                  </p>
+                </div>
+
+                {/* Form */}
+                <form onSubmit={handleSearch} className="space-y-4">
+                  <div>
+                    <label htmlFor="loadNumber" className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">
+                      Load Number <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="loadNumber"
+                      ref={inputRef}
+                      type="text"
+                      value={loadNumber}
+                      onChange={e => setLoadNumber(e.target.value.toUpperCase())}
+                      placeholder="e.g. PGL-12345"
+                      autoComplete="off"
+                      autoFocus
+                      className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
+                    />
+                    <p className="text-xs text-gray-400 mt-1.5">
+                      Your load number was provided by your Paragon account rep.
+                    </p>
+                  </div>
+
+                  {error && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+                      {error}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={loading || !loadNumber.trim()}
+                    className="w-full bg-[#1a4fa0] hover:bg-[#2360bf] disabled:bg-gray-200 disabled:text-gray-400 text-white font-semibold py-3 px-6 rounded-lg transition-colors text-sm flex items-center justify-center gap-2"
+                  >
+                    {loading ? (
+                      <>
+                        <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                        </svg>
+                        Searching…
+                      </>
+                    ) : "Track Shipment"}
+                  </button>
+                </form>
+
+                {/* Need help */}
+                <p className="text-center text-xs text-gray-400 mt-6">
+                  Need help?{" "}
+                  <a href="mailto:info@paragongl.com" className="text-blue-600 hover:underline">
+                    Contact your rep
+                  </a>
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── RESULTS STATE ── */}
+        {result && (
+          <div className="relative z-10 min-h-[calc(100vh-56px)] flex flex-col">
+
+            {/* Results top bar */}
+            <div className="bg-[#112240] border-b border-white/10 px-6 py-4 flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-4 flex-wrap">
+                <button
+                  onClick={handleReset}
+                  className="text-white/60 hover:text-white text-sm flex items-center gap-1.5 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/>
+                  </svg>
+                  New Search
+                </button>
+                <span className="text-white/20">|</span>
+                <span className="text-white/60 text-sm">Load #</span>
+                <span className="text-white font-bold text-sm">{result.loadNumber}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="live-dot" />
+                <span className="text-white/50 text-xs">Live tracking</span>
+              </div>
+            </div>
+
+            {/* Results body */}
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-5 min-h-0">
+
+              {/* ── LEFT PANEL ── */}
+              <div className="lg:col-span-2 bg-white overflow-y-auto">
+
+                {/* Status hero */}
+                <div className="px-6 py-5 border-b border-gray-100">
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Current Status</p>
+                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${statusColor(result.status)}`}>
+                        {result.status}
+                      </span>
+                    </div>
+                    {result.shipperLoadId && (
+                      <div className="text-right">
+                        <p className="text-xs text-gray-400 mb-1">Shipper Load ID</p>
+                        <p className="text-sm font-medium text-gray-700">{result.shipperLoadId}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {result.lastLocation && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                      </svg>
+                      <span className="font-medium">{result.lastLocation}</span>
+                    </div>
+                  )}
+                  {result.lastUpdated && (
+                    <p className="text-xs text-gray-400 mt-1.5">
+                      Last updated: {formatTs(result.lastUpdated)}
+                    </p>
+                  )}
+                </div>
+
+                {/* Stops */}
+                {result.stops.length > 0 && (
+                  <div className="px-6 py-5 border-b border-gray-100">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">Stops</p>
+                    <div className="space-y-4">
+                      {result.stops.map((stop, idx) => (
+                        <div key={idx} className="flex gap-4">
+                          {/* Stop indicator */}
+                          <div className="flex flex-col items-center">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${
+                              stop.type?.toLowerCase().includes("pickup") ? "bg-[#1a4fa0]" : "bg-[#e07b2b]"
+                            }`}>
+                              {String.fromCharCode(65 + idx)}
+                            </div>
+                            {idx < result.stops.length - 1 && (
+                              <div className="w-px flex-1 bg-gray-200 my-1 min-h-[16px]" />
+                            )}
+                          </div>
+
+                          {/* Stop details */}
+                          <div className="pb-4 flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`text-xs font-semibold uppercase tracking-wide ${
+                                stop.type?.toLowerCase().includes("pickup") ? "text-blue-600" : "text-orange-600"
+                              }`}>
+                                {stop.type ?? "Stop"}
+                              </span>
+                            </div>
+                            {stop.address && <p className="text-sm font-medium text-gray-800 truncate">{stop.address}</p>}
+                            <p className="text-sm text-gray-600">
+                              {[stop.city, stop.state, stop.zip].filter(Boolean).join(", ")}
+                            </p>
+                            <div className="mt-2 space-y-0.5">
+                              {stop.scheduledAt && (
+                                <p className="text-xs text-gray-400">
+                                  <span className="font-medium text-gray-500">Scheduled:</span>{" "}
+                                  {formatTs(stop.scheduledAt)}
+                                </p>
+                              )}
+                              {stop.arrivedAt && (
+                                <p className="text-xs text-gray-400">
+                                  <span className="font-medium text-gray-500">Arrived:</span>{" "}
+                                  {formatTs(stop.arrivedAt)}
+                                </p>
+                              )}
+                              {stop.departedAt && (
+                                <p className="text-xs text-gray-400">
+                                  <span className="font-medium text-gray-500">Departed:</span>{" "}
+                                  {formatTs(stop.departedAt)}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Events timeline */}
+                {result.events.length > 0 && (
+                  <div className="px-6 py-5">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">All Events</p>
+                    <div className="space-y-3">
+                      {result.events.map((ev, idx) => (
+                        <div key={idx} className="flex gap-3 text-sm">
+                          <div className="flex flex-col items-center">
+                            <div className="w-2 h-2 rounded-full bg-[#1a4fa0] mt-1.5 flex-shrink-0" />
+                            {idx < result.events.length - 1 && (
+                              <div className="w-px flex-1 bg-gray-200 my-1 min-h-[12px]" />
+                            )}
+                          </div>
+                          <div className="pb-2 flex-1">
+                            <p className="text-gray-700 font-medium leading-snug">{ev.description}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{formatTs(ev.timestamp)}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── RIGHT PANEL — MAP ── */}
+              <div className="lg:col-span-3 bg-gray-100 relative min-h-[400px] lg:min-h-0">
+                <TrackingMap result={result} />
+              </div>
+
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* ── FOOTER ── */}
+      <footer className="bg-[#0d1b2e] border-t border-white/10 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-white/35 z-10 relative">
+        <span>© {new Date().getFullYear()} Paragon Global Logistics. All rights reserved.</span>
+        <div className="flex items-center gap-4">
+          <a href="https://paragongl.com" target="_blank" className="hover:text-white/60 transition-colors">paragongl.com</a>
+          <span>·</span>
+          <a href="mailto:info@paragongl.com" className="hover:text-white/60 transition-colors">info@paragongl.com</a>
+          <span>·</span>
+          <a href="tel:4078532923" className="hover:text-white/60 transition-colors">(407) 853-2923</a>
+        </div>
+      </footer>
+
+    </div>
+  );
+}
+
+// ── Map component using Google Maps Embed (no API key needed for basic embed)
+// For production, swap to @vis.gl/react-google-maps with a proper Maps API key
+function TrackingMap({ result }: { result: TrackResult }) {
+  // Build a Google Maps directions URL from stops
+  const stops = result.stops;
+
+  if (stops.length === 0) {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">
+        No location data available.
+      </div>
+    );
+  }
+
+  const origin      = stops[0];
+  const destination = stops[stops.length - 1];
+
+  const originStr      = [origin.city, origin.state].filter(Boolean).join(", ");
+  const destinationStr = [destination.city, destination.state].filter(Boolean).join(", ");
+
+  // Waypoints for intermediate stops
+  const waypoints = stops
+    .slice(1, -1)
+    .map(s => [s.city, s.state].filter(Boolean).join(", "))
+    .filter(Boolean)
+    .join("|");
+
+  const mapSrc = `https://www.google.com/maps/embed/v1/directions?key=${
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? "YOUR_GOOGLE_MAPS_KEY"
+  }&origin=${encodeURIComponent(originStr)}&destination=${encodeURIComponent(destinationStr)}${
+    waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : ""
+  }&mode=driving`;
+
+  return (
+    <div className="absolute inset-0">
+      {/* Map header */}
+      <div className="absolute top-0 left-0 right-0 z-10 bg-white/95 backdrop-blur-sm border-b border-gray-200 px-4 py-2.5 flex items-center justify-between">
+        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Route Map</span>
+        {result.lastLocation && (
+          <span className="text-xs text-gray-500">
+            Last known: <span className="font-medium text-gray-700">{result.lastLocation}</span>
+          </span>
+        )}
+      </div>
+
+      {/* Google Maps iframe */}
+      <iframe
+        className="absolute inset-0 w-full h-full pt-10"
+        style={{ border: 0 }}
+        loading="lazy"
+        allowFullScreen
+        referrerPolicy="no-referrer-when-downgrade"
+        src={mapSrc}
+        title="Shipment Route Map"
+      />
+    </div>
+  );
+}
