@@ -1,4 +1,4 @@
-// ship.paragongl.com — tracking page — 2026-07-20-v7
+// ship.paragongl.com — tracking page — 2026-07-20-v8
 "use client";
 
 import { useState, useRef, useEffect } from "react";
@@ -125,6 +125,11 @@ export default function TrackingPage() {
       // Always stay on search page if there is any error
       if (!res.ok || data.error) {
         throw new Error(data.error ?? "Unknown error");
+      }
+      // Guard: if result has no meaningful data, treat as not found
+      const hasData = data.status || data.lastLocation || (data.stops?.length > 0) || (data.events?.length > 0);
+      if (!hasData) {
+        throw new Error("No tracking data found for that load number. The load may not be set up for tracking yet, or the tracking link has expired.");
       }
       setResult(data);
     } catch (err: unknown) {
@@ -664,12 +669,12 @@ function initMap() {
     pings.slice(0, -1).forEach(p => {
       new google.maps.Circle({
         center: p,
-        radius: 800,
+        radius: 350,
         strokeColor: "#1a4fa0",
-        strokeOpacity: 0.6,
-        strokeWeight: 1,
+        strokeOpacity: 0.8,
+        strokeWeight: 0,
         fillColor: "#1a4fa0",
-        fillOpacity: 0.5,
+        fillOpacity: 0.75,
         map
       });
     });
