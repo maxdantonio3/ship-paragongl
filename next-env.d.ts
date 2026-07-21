@@ -1,20 +1,5 @@
-import type { Metadata } from "next";
-import "./globals.css";
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
 
-export const metadata: Metadata = {
-  title: "Paragon Global Logistics — Shipment Tracking",
-  description: "Track your Paragon Global Logistics shipment in real time.",
-  icons: { icon: "/favicon.ico" },
-};
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <html lang="en">
-      <body className="font-sans antialiased">{children}</body>
-    </html>
-  );
-}
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/app/building-your-application/configuring/typescript for more information.
