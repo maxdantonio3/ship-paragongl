@@ -1,4 +1,4 @@
-// ship.paragongl.com — tracking page — 2026-07-20-v8
+// ship.paragongl.com — tracking page — 2026-07-20-v9
 "use client";
 
 import { useState, useRef, useEffect } from "react";
@@ -665,20 +665,22 @@ function initMap() {
       map
     });
 
-    // Small dots for each historical ping
+     // Historical ping dots — pixel-based so they stay same size at any zoom
     pings.slice(0, -1).forEach(p => {
-      new google.maps.Circle({
-        center: p,
-        radius: 350,
-        strokeColor: "#1a4fa0",
-        strokeOpacity: 0.8,
-        strokeWeight: 0,
-        fillColor: "#1a4fa0",
-        fillOpacity: 0.75,
-        map
+      new google.maps.Marker({
+        position: p,
+        map,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 5,
+          fillColor: "#1a4fa0",
+          fillOpacity: 0.8,
+          strokeColor: "#ffffff",
+          strokeWeight: 1,
+        },
+        zIndex: 1
       });
     });
-  }
 
   // Current location — large red pin
   if (currentPos) {
