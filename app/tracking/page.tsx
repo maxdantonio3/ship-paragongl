@@ -58,7 +58,7 @@ function formatTs(ts?: string | null) {
 }
 
 function statusColor(status: string) {
-  const s = status.toLowerCase();
+  const s = String(status ?? "").toLowerCase();
   if (s.includes("delivered") || s.includes("complete")) return "bg-green-100 text-green-700 border-green-200";
   if (s.includes("transit") || s.includes("pickup"))     return "bg-blue-100 text-blue-700 border-blue-200";
   if (s.includes("delay") || s.includes("issue"))        return "bg-red-100 text-red-700 border-red-200";
@@ -348,11 +348,11 @@ export default function TrackingPage() {
                 </div>
 
                 {/* Stops — Pickup & Delivery */}
-                {result.stops.length > 0 && (
+                {(result.stops ?? []).length > 0 && (
                   <div className="border-b border-gray-100">
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-6 pt-5 pb-3">Stops</p>
 
-                    {result.stops.map((stop, idx) => {
+                    {(result.stops ?? []).map((stop, idx) => {
                       const isPickup   = stop.type?.toLowerCase().includes("pickup") || idx === 0;
                       const isDelivery = !isPickup;
                       const label      = isPickup ? "Pickup" : "Delivery";
@@ -420,7 +420,7 @@ export default function TrackingPage() {
                           </div>
 
                           {/* Connector line between stops */}
-                          {idx < result.stops.length - 1 && (
+                          {idx < (result.stops ?? []).length - 1 && (
                             <div className="flex justify-center mt-2 mb-1">
                               <div className="flex flex-col items-center gap-1">
                                 <div className="w-px h-3 bg-gray-300" />
@@ -437,14 +437,18 @@ export default function TrackingPage() {
                 )}
 
                 {/* Events timeline */}
-                {result.events.length > 0 && (() => {
+                {(result.events ?? []).length > 0 && (() => {
                   try {
                   // Sort most recent first
-                  const sorted = [...result.events].sort((a, b) => {
-                    const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-                    const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-                    return tb - ta;
-                  });
+                  const sorted = [...(result.events ?? [])]
+                    .filter(e => e != null)
+                    .sort((a, b) => {
+                      try {
+                        const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+                        const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+                        return tb - ta;
+                      } catch { return 0; }
+                    });
                   const PREVIEW = 5;
                   const visible = showAllEvents ? sorted : sorted.slice(0, PREVIEW);
                   const hidden  = sorted.length - PREVIEW;
@@ -456,15 +460,15 @@ export default function TrackingPage() {
                         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                           All Events
                           <span className="ml-1.5 text-gray-300 font-normal normal-case tracking-normal">
-                            ({result.events.length})
+                            ({(result.events ?? []).length})
                           </span>
                         </p>
-                        {result.events.length > PREVIEW && (
+                        {(result.events ?? []).length > PREVIEW && (
                           <button
                             onClick={() => setShowAllEvents(v => !v)}
                             className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors"
                           >
-                            {showAllEvents ? "Show less ↑" : `See all ${result.events.length} ↓`}
+                            {showAllEvents ? "Show less ↑" : `See all ${(result.events ?? []).length} ↓`}
                           </button>
                         )}
                       </div>
@@ -484,7 +488,9 @@ export default function TrackingPage() {
                             <div className="pb-2 flex-1">
                               <div className="flex items-start gap-2 flex-wrap">
                                 <p className={`leading-snug flex-1 ${idx === 0 ? "text-gray-900 font-semibold" : "text-gray-600 font-medium"}`}>
-                                  {ev.description !== "(no description)" ? ev.description : "Location Update"}
+                                  {String(ev.description ?? "Location Update") !== "(no description)"
+                                    ? String(ev.description ?? "Location Update")
+                                    : "Location Update"}
                                 </p>
                                 {ev.code && (
                                   <span className="text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded flex-shrink-0">
@@ -501,7 +507,7 @@ export default function TrackingPage() {
                       </div>
 
                       {/* Show more / less button at bottom */}
-                      {result.events.length > PREVIEW && (
+                      {(result.events ?? []).length > PREVIEW && (
                         <button
                           onClick={() => setShowAllEvents(v => !v)}
                           className="mt-4 w-full py-2.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-all"
@@ -584,7 +590,7 @@ function TrackingMap({ result }: { result: TrackResult }) {
 
     const center = currentLat && currentLng
       ? { lat: currentLat, lng: currentLng }
-      : result.stops[0]?.city
+      : (result.stops?.[0])?.city
         ? null  // will geocode
         : { lat: 28.5383, lng: -81.3792 }; // Orlando default
 
@@ -594,8 +600,8 @@ function TrackingMap({ result }: { result: TrackResult }) {
       .map(p => `{lat:${parseFloat(p.lat)},lng:${parseFloat(p.lng)}}`)
       .join(",");
 
-    const stopA = result.stops[0];
-    const stopB = result.stops[result.stops.length - 1];
+    const stopA = result.stops?.[0];
+    const stopB = result.stops[(result.stops ?? []).length - 1];
 
     return `<!DOCTYPE html>
 <html>
@@ -616,14 +622,14 @@ function TrackingMap({ result }: { result: TrackResult }) {
   <div class="legend-row"><div class="dot" style="background:#dc2626"></div> Current location</div>
   <div class="legend-row"><div class="dot" style="background:#1a4fa0"></div> Ping trail</div>
   ${stopA ? `<div class="legend-row"><div class="dot" style="background:#1d4ed8;font-size:8px;color:#fff;display:flex;align-items:center;justify-content:center">A</div> Pickup</div>` : ""}
-  ${stopB && result.stops.length > 1 ? `<div class="legend-row"><div class="dot" style="background:#ea580c;font-size:8px;color:#fff;display:flex;align-items:center;justify-content:center">B</div> Delivery</div>` : ""}
+  ${stopB && (result.stops ?? []).length > 1 ? `<div class="legend-row"><div class="dot" style="background:#ea580c;font-size:8px;color:#fff;display:flex;align-items:center;justify-content:center">B</div> Delivery</div>` : ""}
 </div>
 <script>
 let map, geocoder;
 const pings = [${pingArray}];
 const currentPos = ${currentLat && currentLng ? `{lat:${currentLat},lng:${currentLng}}` : 'null'};
 const stopA = ${stopA ? JSON.stringify({address: stopA.address, city: stopA.city, state: stopA.state, zip: stopA.zip}) : 'null'};
-const stopB = ${stopB && result.stops.length > 1 ? JSON.stringify({address: stopB.address, city: stopB.city, state: stopB.state, zip: stopB.zip}) : 'null'};
+const stopB = ${stopB && (result.stops ?? []).length > 1 ? JSON.stringify({address: stopB.address, city: stopB.city, state: stopB.state, zip: stopB.zip}) : 'null'};
 
 function initMap() {
   const center = currentPos ?? (pings.length ? pings[pings.length-1] : {lat:28.5383,lng:-81.3792});
