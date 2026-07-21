@@ -1,3 +1,4 @@
+// ship.paragongl.com — tracking page — 2026-07-20-v7
 "use client";
 
 import { useState, useRef, useEffect } from "react";
