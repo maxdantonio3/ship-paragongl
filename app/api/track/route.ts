@@ -1,4 +1,4 @@
-// ship.paragongl.com — tracking API — 2026-07-20-v9
+// ship.paragongl.com — tracking API — 2026-07-20-v10
 import { NextRequest, NextResponse } from "next/server";
 
 const PARTNER_ID = process.env.TT_PARTNER_ID!;
