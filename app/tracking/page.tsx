@@ -97,7 +97,8 @@ export default function TrackingPage() {
             setResult(data);
           })
           .catch((err: unknown) => {
-            setError(err instanceof Error ? err.message : "Something went wrong.");
+            const msg = err instanceof Error ? err.message : String(err ?? "Something went wrong.");
+            setError(msg);
           })
           .finally(() => setLoading(false));
       }, 100);
@@ -123,7 +124,8 @@ export default function TrackingPage() {
       if (!res.ok) throw new Error(data.error ?? "Unknown error");
       setResult(data);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      const msg = err instanceof Error ? err.message : String(err ?? "Something went wrong.");
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -232,18 +234,20 @@ export default function TrackingPage() {
                       </svg>
                       <div>
                         <p className="text-sm font-semibold text-red-700">
-                          {error.includes("No shipment") || error.includes("404")
-                            ? "Load number not found"
-                            : error.includes("502") || error.includes("Tracking service")
-                            ? "Tracking service unavailable"
-                            : "Something went wrong"}
+                          {(() => {
+                            const e = String(error ?? "");
+                            if (e.includes("No shipment") || e.includes("404")) return "Load number not found";
+                            if (e.includes("502") || e.includes("Tracking service")) return "Tracking service unavailable";
+                            return "Something went wrong";
+                          })()}
                         </p>
                         <p className="text-xs text-red-500 mt-1 leading-relaxed">
-                          {error.includes("No shipment") || error.includes("404")
-                            ? "This load number is invalid or the tracking link has expired. Please double-check and try again."
-                            : error.includes("502") || error.includes("Tracking service")
-                            ? "We’re having trouble connecting to the tracking service. Please try again in a moment."
-                            : "Please try again or contact your Paragon rep at (407) 853-2923."}
+                          {(() => {
+                            const e = String(error ?? "");
+                            if (e.includes("No shipment") || e.includes("404")) return "This load number is invalid or the tracking link has expired. Please double-check and try again.";
+                            if (e.includes("502") || e.includes("Tracking service")) return "We’re having trouble connecting to the tracking service. Please try again in a moment.";
+                            return "Please try again or contact your Paragon rep at (407) 853-2923.";
+                          })()}
                         </p>
                       </div>
                     </div>
