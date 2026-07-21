@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 
 // ── Types ──────────────────────────────────────────────
@@ -72,7 +72,37 @@ export default function TrackingPage() {
   const [error, setError]             = useState<string | null>(null);
   const [result, setResult]           = useState<TrackResult | null>(null);
   const [showAllEvents, setShowAllEvents] = useState(false);
+  const [crashError, setCrashError]       = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-search if arriving from a deep link like /tracking/1115
+  useEffect(() => {
+    const auto = sessionStorage.getItem("pgl_auto_track");
+    if (auto) {
+      sessionStorage.removeItem("pgl_auto_track");
+      setLoadNumber(auto.toUpperCase());
+      // Small delay so state settles before submitting
+      setTimeout(() => {
+        setLoading(true);
+        setError(null);
+        setResult(null);
+        fetch("/api/track", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ loadNumber: auto.trim() }),
+        })
+          .then(r => r.json())
+          .then(data => {
+            if (data.error) throw new Error(data.error);
+            setResult(data);
+          })
+          .catch((err: unknown) => {
+            setError(err instanceof Error ? err.message : "Something went wrong.");
+          })
+          .finally(() => setLoading(false));
+      }, 100);
+    }
+  }, []);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -196,8 +226,26 @@ export default function TrackingPage() {
                   </div>
 
                   {error && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
-                      {error}
+                    <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-4 flex items-start gap-3">
+                      <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                      </svg>
+                      <div>
+                        <p className="text-sm font-semibold text-red-700">
+                          {error.includes("No shipment") || error.includes("404")
+                            ? "Load number not found"
+                            : error.includes("502") || error.includes("Tracking service")
+                            ? "Tracking service unavailable"
+                            : "Something went wrong"}
+                        </p>
+                        <p className="text-xs text-red-500 mt-1 leading-relaxed">
+                          {error.includes("No shipment") || error.includes("404")
+                            ? "This load number is invalid or the tracking link has expired. Please double-check and try again."
+                            : error.includes("502") || error.includes("Tracking service")
+                            ? "We’re having trouble connecting to the tracking service. Please try again in a moment."
+                            : "Please try again or contact your Paragon rep at (407) 853-2923."}
+                        </p>
+                      </div>
                     </div>
                   )}
 
@@ -231,7 +279,7 @@ export default function TrackingPage() {
         )}
 
         {/* ── RESULTS STATE ── */}
-        {result && (
+        {result && !crashError && (
           <div className="relative z-10 min-h-[calc(100vh-56px)] flex flex-col">
 
             {/* Results top bar */}
@@ -386,6 +434,7 @@ export default function TrackingPage() {
 
                 {/* Events timeline */}
                 {result.events.length > 0 && (() => {
+                  try {
                   // Sort most recent first
                   const sorted = [...result.events].sort((a, b) => {
                     const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
@@ -460,6 +509,7 @@ export default function TrackingPage() {
                       )}
                     </div>
                   );
+                  } catch { return null; }
                 })()}
               </div>
 
@@ -472,6 +522,33 @@ export default function TrackingPage() {
           </div>
         )}
       </main>
+
+      {/* ── CRASH FALLBACK ── */}
+      {result && crashError && (
+        <div className="flex-1 flex items-center justify-center px-4">
+          <div className="text-center max-w-sm">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Unable to Load Tracking</h2>
+            <p className="text-gray-500 text-sm mb-6">
+              There was a problem loading the tracking details for this shipment. This load may have already been delivered, or the tracking link may have expired.
+            </p>
+            <button
+              onClick={() => { setCrashError(false); setResult(null); setLoadNumber(""); }}
+              className="bg-[#1a4fa0] text-white px-6 py-2.5 rounded-lg text-sm font-semibold hover:bg-[#2360bf] transition-colors"
+            >
+              ← Try Another Load Number
+            </button>
+            <p className="text-xs text-gray-400 mt-4">
+              Need help? Call us at{" "}
+              <a href="tel:4078532923" className="text-[#1a4fa0] hover:underline">(407) 853-2923</a>
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── FOOTER ── */}
       <footer className="bg-[#0d1b2e] border-t border-white/10 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-white/35 z-10 relative">
@@ -494,8 +571,8 @@ function TrackingMap({ result }: { result: TrackResult }) {
   const hasKey   = MAPS_KEY && MAPS_KEY !== "placeholder" && MAPS_KEY !== "YOUR_GOOGLE_MAPS_KEY";
 
   const pings   = result.locationPings ?? [];
-  const currentLat = result.lat ? parseFloat(result.lat) : null;
-  const currentLng = result.lng ? parseFloat(result.lng) : null;
+  const currentLat = result.lat && !isNaN(parseFloat(result.lat)) ? parseFloat(result.lat) : null;
+  const currentLng = result.lng && !isNaN(parseFloat(result.lng)) ? parseFloat(result.lng) : null;
 
   // Build an HTML page that uses the Maps JS API — interactive, zoomable, pannable
   const buildMapHtml = () => {
@@ -509,6 +586,7 @@ function TrackingMap({ result }: { result: TrackResult }) {
 
     // Build JS arrays for pings and stops
     const pingArray = pings
+      .filter(p => p.lat && p.lng && !isNaN(parseFloat(p.lat)) && !isNaN(parseFloat(p.lng)))
       .map(p => `{lat:${parseFloat(p.lat)},lng:${parseFloat(p.lng)}}`)
       .join(",");
 
