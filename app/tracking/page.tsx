@@ -121,7 +121,10 @@ export default function TrackingPage() {
         body: JSON.stringify({ loadNumber: val }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Unknown error");
+      // Always stay on search page if there is any error
+      if (!res.ok || data.error) {
+        throw new Error(data.error ?? "Unknown error");
+      }
       setResult(data);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err ?? "Something went wrong.");

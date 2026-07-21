@@ -136,6 +136,22 @@ export async function POST(req: NextRequest) {
       code:        e.status?.code ?? null,
     }));
 
+    // Validate we have enough real data to show a results page
+    // A load with no status, no location, no stops and no events
+    // is not trackable — treat it as not found
+    const hasRealData = status !== "Unknown"
+      || lastLocation
+      || stops.length > 0
+      || events.length > 0
+      || locationPings.length > 0;
+
+    if (!hasRealData) {
+      return NextResponse.json(
+        { error: `No tracking data found for load number "${id}". The load may not be set up for tracking yet, or the tracking link has expired.` },
+        { status: 404 }
+      );
+    }
+
     return NextResponse.json({
       loadNumber:    load.loadNumber          ?? id,
       shipperLoadId: load.shipperLoadNumber   ?? load.shipperLoadId ?? null,
