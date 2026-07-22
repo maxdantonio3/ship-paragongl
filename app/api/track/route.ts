@@ -1,4 +1,4 @@
-// ship.paragongl.com — tracking API — 2026-07-22-v11
+// ship.paragongl.com — tracking API — 2026-07-22-v13
 import { NextRequest, NextResponse } from "next/server";
 
 const PARTNER_ID = process.env.TT_PARTNER_ID!;
@@ -75,16 +75,16 @@ export async function POST(req: NextRequest) {
 
     const rawStops = load.stops ?? load.stopDetails ?? load.stopList ?? [];
     const stops = rawStops.map((s: TTStop, idx: number) => ({
-      sequence:    s.stopSequence ?? s.sequence ?? s.stopNumber ?? idx,
+      sequence:    s.orderNumber ?? s.stopSequence ?? s.sequence ?? s.stopNumber ?? idx,
       type:        s.stopType ?? s.type ?? (idx === 0 ? "PICKUP" : "DELIVERY"),
       address:     s.address ?? s.streetAddress ?? s.location,
       city:        s.city    ?? s.stopCity,
       state:       s.state   ?? s.stopState,
-      zip:         s.zip     ?? s.stopZip ?? s.postalCode,
-      scheduledAt: s.scheduledArrival ?? s.scheduledAt ?? s.appointmentTime
-                ?? s.scheduledTime    ?? s.apptTime,
-      arrivedAt:   s.actualArrival    ?? s.arrivedAt   ?? s.enteredAt,
-      departedAt:  s.actualDeparture  ?? s.departedAt  ?? s.leftAt,
+      zip:         s.zipcode ?? s.zip ?? s.stopZip ?? s.postalCode,
+      scheduledAt: s.datetime ?? s.scheduledArrival ?? s.scheduledAt
+                ?? s.appointmentTime ?? s.scheduledTime ?? s.apptTime,
+      arrivedAt:   s.actualArrival  ?? s.arrivedAt  ?? s.enteredAt,
+      departedAt:  s.datetimeExit   ?? s.actualDeparture ?? s.departedAt ?? s.leftAt,
     }));
 
     // Extract location pings from events — must declare rawEvents first
@@ -208,12 +208,15 @@ interface TTLoad {
   locationHistory?: TTLocationPing[]; locationPings?: TTLocationPing[];
 }
 interface TTStop {
-  stopSequence?: number; sequence?: number; stopNumber?: number;
+  orderNumber?: number; stopSequence?: number; sequence?: number; stopNumber?: number;
   stopType?: string; type?: string;
+  locationName?: string; locationId?: string;
   address?: string; streetAddress?: string; location?: string;
   city?: string; stopCity?: string;
   state?: string; stopState?: string;
-  zip?: string; stopZip?: string; postalCode?: string;
+  zipcode?: string; zip?: string; stopZip?: string; postalCode?: string;
+  lat?: number; lon?: number;
+  datetime?: string; datetimeExit?: string; stopGMTDiff?: string;
   scheduledArrival?: string; scheduledAt?: string; appointmentTime?: string;
   scheduledTime?: string; apptTime?: string;
   actualArrival?: string; arrivedAt?: string; enteredAt?: string;
