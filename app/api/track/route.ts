@@ -1,4 +1,4 @@
-// ship.paragongl.com — tracking API — 2026-07-22-v15
+// ship.paragongl.com — tracking API — 2026-07-23-v17
 import { NextRequest, NextResponse } from "next/server";
 
 const PARTNER_ID = process.env.TT_PARTNER_ID!;
@@ -63,7 +63,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-
     const loc = load.latestLocation;
     const lastLocation = loc ? [loc.city, loc.state].filter(Boolean).join(", ") : null;
     const lastUpdated  = loc?.timestamp ?? null;
@@ -76,16 +75,16 @@ export async function POST(req: NextRequest) {
 
     const rawStops = load.stops ?? load.stopDetails ?? load.stopList ?? [];
     const stops = rawStops.map((s: TTStop, idx: number) => ({
-      sequence:    s.orderNumber ?? s.stopSequence ?? s.sequence ?? s.stopNumber ?? idx,
+      sequence:    s.stopSequence ?? s.sequence ?? s.stopNumber ?? idx,
       type:        s.stopType ?? s.type ?? (idx === 0 ? "PICKUP" : "DELIVERY"),
       address:     s.address ?? s.streetAddress ?? s.location,
       city:        s.city    ?? s.stopCity,
       state:       s.state   ?? s.stopState,
-      zip:         s.zipcode ?? s.zip ?? s.stopZip ?? s.postalCode,
-      scheduledAt: s.datetime ?? s.scheduledArrival ?? s.scheduledAt
-                ?? s.appointmentTime ?? s.scheduledTime ?? s.apptTime,
-      arrivedAt:   s.actualArrival  ?? s.arrivedAt  ?? s.enteredAt,
-      departedAt:  s.datetimeExit   ?? s.actualDeparture ?? s.departedAt ?? s.leftAt,
+      zip:         s.zip     ?? s.stopZip ?? s.postalCode,
+      scheduledAt: s.scheduledArrival ?? s.scheduledAt ?? s.appointmentTime
+                ?? s.scheduledTime    ?? s.apptTime,
+      arrivedAt:   s.actualArrival    ?? s.arrivedAt   ?? s.enteredAt,
+      departedAt:  s.actualDeparture  ?? s.departedAt  ?? s.leftAt,
     }));
 
     // Extract location pings from events — must declare rawEvents first
@@ -123,20 +122,43 @@ export async function POST(req: NextRequest) {
       })
       .map(p => ({ lat: String(p.lat), lng: String(p.lon ?? p.lng), timestamp: p.timestamp }));
 
-    const events = rawEvents.map((e: TTEvent) => ({
-      // status.name is the human-readable event description per TT docs
-      description: e.status?.name ?? e.status?.code
-                ?? e.eventType ?? e.eventDescription ?? e.eventName
-                ?? e.description ?? e.event ?? e.name
-                ?? e.action ?? "(no description)",
-      timestamp:   e.status?.timestamp ?? e.status?.timestampSec
-                ?? e.eventTime ?? e.eventTimestamp ?? e.eventDate
-                ?? e.timestamp ?? e.time ?? e.createdAt ?? e.dateTime,
-      lat:         e.status?.location?.lat ?? e.latitude ?? e.lat ?? null,
-      lng:         e.status?.location?.lon ?? e.longitude ?? e.lon ?? null,
-      stopNumber:  e.status?.stopOrderNumber ?? null,
-      code:        e.status?.code ?? null,
-    }));
+    // Whitelist of status codes to show customers
+    const CUSTOMER_CODES = new Set([
+      "CL","CA","ST","TWSA","TWSS","TLT","TILTI","TILTO",
+      "BOT","OER","RL","SD","SDP",
+      "PE","PEC","PX","PXC",
+      "SE","SEC","SX","SXC",
+      "DE","DEC","DX","DXC",
+    ]);
+
+    const events = rawEvents
+      .filter((e: TTEvent) => {
+        const code = e.status?.code;
+        if (code) return CUSTOMER_CODES.has(code);
+        // No code — filter by description keywords
+        const desc = String(e.status?.name ?? e.description ?? "").toLowerCase();
+        return [
+          "created","started","tracking","cancelled","canceled",
+          "arrived at origin","left origin","arrived at stop","left stop",
+          "arrived at destination","left destination",
+          "running late","stopped by","interrupted","back on time",
+          "off expected route","tracking will start",
+        ].some(k => desc.includes(k));
+      })
+      .map((e: TTEvent) => ({
+        description: e.status?.name ?? e.status?.code
+                  ?? e.eventType ?? e.eventDescription ?? e.eventName
+                  ?? e.description ?? e.event ?? e.name
+                  ?? e.action ?? "(no description)",
+        timestamp:   e.status?.timestamp ?? e.status?.timestampSec
+                  ?? e.eventTime ?? e.eventTimestamp ?? e.eventDate
+                  ?? e.timestamp ?? e.time ?? e.createdAt ?? e.dateTime,
+        lat:         e.status?.location?.lat ?? e.latitude ?? e.lat ?? null,
+        lng:         e.status?.location?.lon ?? e.longitude ?? e.lon ?? null,
+        stopNumber:  e.status?.stopOrderNumber ?? null,
+        code:        e.status?.code ?? null,
+      }));
+
 
     // Validate we have enough real data to show a results page
     // A load with no status, no location, no stops and no events
@@ -155,11 +177,6 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      _raw_keys: Object.keys(load),
-      _raw_stops: (load as Record<string,unknown>).stops,
-      _raw_stop_details: (load as Record<string,unknown>).stopDetails,
-      _raw_stop_list: (load as Record<string,unknown>).stopList,
-      _raw_locations: (load as Record<string,unknown>).locations,
       loadNumber:    load.loadNumber          ?? id,
       shipperLoadId: load.shipperLoadNumber   ?? load.shipperLoadId ?? null,
       status,
@@ -214,15 +231,12 @@ interface TTLoad {
   locationHistory?: TTLocationPing[]; locationPings?: TTLocationPing[];
 }
 interface TTStop {
-  orderNumber?: number; stopSequence?: number; sequence?: number; stopNumber?: number;
+  stopSequence?: number; sequence?: number; stopNumber?: number;
   stopType?: string; type?: string;
-  locationName?: string; locationId?: string;
   address?: string; streetAddress?: string; location?: string;
   city?: string; stopCity?: string;
   state?: string; stopState?: string;
-  zipcode?: string; zip?: string; stopZip?: string; postalCode?: string;
-  lat?: number; lon?: number;
-  datetime?: string; datetimeExit?: string; stopGMTDiff?: string;
+  zip?: string; stopZip?: string; postalCode?: string;
   scheduledArrival?: string; scheduledAt?: string; appointmentTime?: string;
   scheduledTime?: string; apptTime?: string;
   actualArrival?: string; arrivedAt?: string; enteredAt?: string;
