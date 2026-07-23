@@ -1,4 +1,4 @@
-// ship.paragongl.com — tracking API — 2026-07-22-v14
+// ship.paragongl.com — tracking API — 2026-07-23-v19
 import { NextRequest, NextResponse } from "next/server";
 
 const PARTNER_ID = process.env.TT_PARTNER_ID!;
@@ -63,11 +63,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Log full raw load object to see exact field names from TruckerTools
-    console.log("[track] raw load keys:", JSON.stringify(Object.keys(load)));
-    console.log("[track] raw stops field:", JSON.stringify(load.stops));
-    console.log("[track] full raw load:", JSON.stringify(load).slice(0, 2000));
-
     const loc = load.latestLocation;
     const lastLocation = loc ? [loc.city, loc.state].filter(Boolean).join(", ") : null;
     const lastUpdated  = loc?.timestamp ?? null;
@@ -80,16 +75,16 @@ export async function POST(req: NextRequest) {
 
     const rawStops = load.stops ?? load.stopDetails ?? load.stopList ?? [];
     const stops = rawStops.map((s: TTStop, idx: number) => ({
-      sequence:    s.orderNumber ?? s.stopSequence ?? s.sequence ?? s.stopNumber ?? idx,
+      sequence:    s.stopSequence ?? s.sequence ?? s.stopNumber ?? idx,
       type:        s.stopType ?? s.type ?? (idx === 0 ? "PICKUP" : "DELIVERY"),
       address:     s.address ?? s.streetAddress ?? s.location,
       city:        s.city    ?? s.stopCity,
       state:       s.state   ?? s.stopState,
-      zip:         s.zipcode ?? s.zip ?? s.stopZip ?? s.postalCode,
-      scheduledAt: s.datetime ?? s.scheduledArrival ?? s.scheduledAt
-                ?? s.appointmentTime ?? s.scheduledTime ?? s.apptTime,
-      arrivedAt:   s.actualArrival  ?? s.arrivedAt  ?? s.enteredAt,
-      departedAt:  s.datetimeExit   ?? s.actualDeparture ?? s.departedAt ?? s.leftAt,
+      zip:         s.zip     ?? s.stopZip ?? s.postalCode,
+      scheduledAt: s.scheduledArrival ?? s.scheduledAt ?? s.appointmentTime
+                ?? s.scheduledTime    ?? s.apptTime,
+      arrivedAt:   s.actualArrival    ?? s.arrivedAt   ?? s.enteredAt,
+      departedAt:  s.actualDeparture  ?? s.departedAt  ?? s.leftAt,
     }));
 
     // Extract location pings from events — must declare rawEvents first
@@ -213,15 +208,12 @@ interface TTLoad {
   locationHistory?: TTLocationPing[]; locationPings?: TTLocationPing[];
 }
 interface TTStop {
-  orderNumber?: number; stopSequence?: number; sequence?: number; stopNumber?: number;
+  stopSequence?: number; sequence?: number; stopNumber?: number;
   stopType?: string; type?: string;
-  locationName?: string; locationId?: string;
   address?: string; streetAddress?: string; location?: string;
   city?: string; stopCity?: string;
   state?: string; stopState?: string;
-  zipcode?: string; zip?: string; stopZip?: string; postalCode?: string;
-  lat?: number; lon?: number;
-  datetime?: string; datetimeExit?: string; stopGMTDiff?: string;
+  zip?: string; stopZip?: string; postalCode?: string;
   scheduledArrival?: string; scheduledAt?: string; appointmentTime?: string;
   scheduledTime?: string; apptTime?: string;
   actualArrival?: string; arrivedAt?: string; enteredAt?: string;
