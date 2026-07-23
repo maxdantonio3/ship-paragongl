@@ -1,4 +1,4 @@
-// ship.paragongl.com — tracking API — 2026-07-23-v17
+// ship.paragongl.com — tracking API — 2026-07-23-v18
 import { NextRequest, NextResponse } from "next/server";
 
 const PARTNER_ID = process.env.TT_PARTNER_ID!;
@@ -122,28 +122,45 @@ export async function POST(req: NextRequest) {
       })
       .map(p => ({ lat: String(p.lat), lng: String(p.lon ?? p.lng), timestamp: p.timestamp }));
 
-    // Whitelist of status codes to show customers
-    const CUSTOMER_CODES = new Set([
-      "CL","CA","ST","TWSA","TWSS","TLT","TILTI","TILTO",
-      "BOT","OER","RL","SD","SDP",
-      "PE","PEC","PX","PXC",
-      "SE","SEC","SX","SXC",
-      "DE","DEC","DX","DXC",
-    ]);
+    // Hide list — internal events customers don't need to see
+    const HIDE_DESCRIPTIONS = [
+      "driver has the app",
+      "sent text message to the driver",
+      "email sent to the broker",
+      "email sent to the dispatcher",
+      "shipper has viewed the load track",
+      "carrier has viewed the load track",
+      "broker has viewed the load track",
+      "driver has viewed the load track",
+      "updated stop",
+      "updated load number",
+      "updated shipper",
+      "updated carrier",
+      "updated broker",
+      "updated driver",
+      "sent verification code",
+      "app not installed",
+      "app uninstalled",
+      "driver installed the app",
+      "switched from eld",
+      "eld track",
+      "load is set to eld",
+      "sms sent",
+      "sent whatsapp",
+      "reset by system",
+      "notification sent",
+      "post geofence",
+      "driver needs to start",
+      "autostart failed",
+    ];
 
     const events = rawEvents
       .filter((e: TTEvent) => {
-        const code = e.status?.code;
-        if (code) return CUSTOMER_CODES.has(code);
-        // No code — filter by description keywords
-        const desc = String(e.status?.name ?? e.description ?? "").toLowerCase();
-        return [
-          "created","started","tracking","cancelled","canceled",
-          "arrived at origin","left origin","arrived at stop","left stop",
-          "arrived at destination","left destination",
-          "running late","stopped by","interrupted","back on time",
-          "off expected route","tracking will start",
-        ].some(k => desc.includes(k));
+        const desc = String(
+          e.status?.name ?? e.description ?? ""
+        ).toLowerCase();
+        // Hide if description matches any internal event
+        return !HIDE_DESCRIPTIONS.some(h => desc.includes(h));
       })
       .map((e: TTEvent) => ({
         description: e.status?.name ?? e.status?.code
