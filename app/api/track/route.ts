@@ -1,4 +1,4 @@
-// ship.paragongl.com — tracking API — 2026-07-23-v19
+// ship.paragongl.com — tracking API — 2026-07-23-v18
 import { NextRequest, NextResponse } from "next/server";
 
 const PARTNER_ID = process.env.TT_PARTNER_ID!;
@@ -122,20 +122,60 @@ export async function POST(req: NextRequest) {
       })
       .map(p => ({ lat: String(p.lat), lng: String(p.lon ?? p.lng), timestamp: p.timestamp }));
 
-    const events = rawEvents.map((e: TTEvent) => ({
-      // status.name is the human-readable event description per TT docs
-      description: e.status?.name ?? e.status?.code
-                ?? e.eventType ?? e.eventDescription ?? e.eventName
-                ?? e.description ?? e.event ?? e.name
-                ?? e.action ?? "(no description)",
-      timestamp:   e.status?.timestamp ?? e.status?.timestampSec
-                ?? e.eventTime ?? e.eventTimestamp ?? e.eventDate
-                ?? e.timestamp ?? e.time ?? e.createdAt ?? e.dateTime,
-      lat:         e.status?.location?.lat ?? e.latitude ?? e.lat ?? null,
-      lng:         e.status?.location?.lon ?? e.longitude ?? e.lon ?? null,
-      stopNumber:  e.status?.stopOrderNumber ?? null,
-      code:        e.status?.code ?? null,
-    }));
+    // Hide list — internal events customers don't need to see
+    const HIDE_DESCRIPTIONS = [
+      "driver has the app",
+      "sent text message to the driver",
+      "email sent to the broker",
+      "email sent to the dispatcher",
+      "shipper has viewed the load track",
+      "carrier has viewed the load track",
+      "broker has viewed the load track",
+      "driver has viewed the load track",
+      "updated stop",
+      "updated load number",
+      "updated shipper",
+      "updated carrier",
+      "updated broker",
+      "updated driver",
+      "sent verification code",
+      "app not installed",
+      "app uninstalled",
+      "driver installed the app",
+      "switched from eld",
+      "eld track",
+      "load is set to eld",
+      "sms sent",
+      "sent whatsapp",
+      "reset by system",
+      "notification sent",
+      "post geofence",
+      "driver needs to start",
+      "autostart failed",
+    ];
+
+    const events = rawEvents
+      .filter((e: TTEvent) => {
+        const desc = String(
+          e.status?.name ?? e.description ?? ""
+        ).toLowerCase();
+        // Hide if description matches any internal event
+        return !HIDE_DESCRIPTIONS.some(h => desc.includes(h));
+      })
+      .map((e: TTEvent) => ({
+        description: e.status?.name ?? e.status?.code
+                  ?? e.eventType ?? e.eventDescription ?? e.eventName
+                  ?? e.description ?? e.event ?? e.name
+                  ?? e.action ?? "(no description)",
+        timestamp:   e.status?.timestamp ?? e.status?.timestampSec
+                  ?? e.eventTime ?? e.eventTimestamp ?? e.eventDate
+                  ?? e.timestamp ?? e.time ?? e.createdAt ?? e.dateTime,
+        lat:         e.status?.location?.lat ?? e.latitude ?? e.lat ?? null,
+        lng:         e.status?.location?.lon ?? e.longitude ?? e.lon ?? null,
+        stopNumber:  e.status?.stopOrderNumber ?? null,
+        code:        e.status?.code ?? null,
+      }));
+
 
     // Validate we have enough real data to show a results page
     // A load with no status, no location, no stops and no events
