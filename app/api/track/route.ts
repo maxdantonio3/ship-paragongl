@@ -1,5 +1,32 @@
-// ship.paragongl.com — tracking API — 2026-07-23-v19
+// ship.paragongl.com — tracking API — 2026-07-23-v20
 import { NextRequest, NextResponse } from "next/server";
+
+// ── Internal event filtering ───────────────────────────
+// TT returns `code: null` on every event, so we match on description text.
+// Order matters only for readability; matching is substring-based.
+const HIDDEN_EVENT_PATTERNS = [
+  // App / device state
+  "has the app", "app not installed", "uninstalled", "installed the app",
+  "device may be switched off",
+  // Outbound messaging
+  "sent text message", "text message to the driver", "email sent to",
+  "sms sent", "sent whatsapp", "notification sent", "sent verification code",
+  // Read receipts
+  "has viewed the load track", "viewed the load track",
+  // Record edits
+  "updated stop", "updated load number", "updated shipper",
+  "updated carrier", "updated broker", "updated driver",
+  // ELD plumbing
+  "switched from eld", "eld track", "set to eld",
+  // System noise
+  "reset by system", "post geofence", "needs to start", "autostart failed",
+];
+
+function isInternalEvent(description: unknown): boolean {
+  const s = String(description ?? "").toLowerCase();
+  if (!s) return false;
+  return HIDDEN_EVENT_PATTERNS.some(p => s.includes(p));
+}
 
 const PARTNER_ID = process.env.TT_PARTNER_ID!;
 const ACCOUNT_ID = process.env.TT_ACCOUNT_ID!;
@@ -67,9 +94,13 @@ export async function POST(req: NextRequest) {
     const lastLocation = loc ? [loc.city, loc.state].filter(Boolean).join(", ") : null;
     const lastUpdated  = loc?.timestamp ?? null;
 
+    // latestStatus.name is the human-readable status per TT docs.
+    // (.status is not a real field on this object — it was always undefined,
+    //  so every load silently fell through to the "In Transit" default.)
     const status =
-      load.latestStatus?.status ??
+      load.latestStatus?.name ??
       load.latestStatus?.description ??
+      load.latestStatus?.status ??
       load.status ??
       "In Transit";
 
@@ -122,7 +153,7 @@ export async function POST(req: NextRequest) {
       })
       .map(p => ({ lat: String(p.lat), lng: String(p.lon ?? p.lng), timestamp: p.timestamp }));
 
-    const events = rawEvents.map((e: TTEvent) => ({
+    const allMappedEvents = rawEvents.map((e: TTEvent) => ({
       // status.name is the human-readable event description per TT docs
       description: e.status?.name ?? e.status?.code
                 ?? e.eventType ?? e.eventDescription ?? e.eventName
@@ -137,13 +168,26 @@ export async function POST(req: NextRequest) {
       code:        e.status?.code ?? null,
     }));
 
+    // Hide internal/operational noise from customers.
+    // NOTE: location pings are extracted from rawEvents ABOVE this line, so
+    // filtering here never removes points from the map trail.
+    const events = allMappedEvents.filter(e => !isInternalEvent(e.description));
+
+    console.log(
+      `[track] events: ${allMappedEvents.length} total, ` +
+      `${events.length} shown, ${allMappedEvents.length - events.length} filtered`
+    );
+
     // Validate we have enough real data to show a results page
     // A load with no status, no location, no stops and no events
     // is not trackable — treat it as not found
+    // Use the UNFILTERED count here: a load that exists but has only internal
+    // events is still a real load, so we show the results page (with status and
+    // map) rather than a misleading "not found" error.
     const hasRealData = status !== "Unknown"
       || lastLocation
       || stops.length > 0
-      || events.length > 0
+      || allMappedEvents.length > 0
       || locationPings.length > 0;
 
     if (!hasRealData) {
@@ -195,7 +239,7 @@ interface TTLocationPing {
 interface TTLoad {
   loadNumber?: string; shipperLoadNumber?: string; shipperLoadId?: string;
   status?: string;
-  latestStatus?: { status?: string; description?: string; timestamp?: string };
+  latestStatus?: { name?: string; code?: string; status?: string; description?: string; timestamp?: string };
   latestLocation?: {
     lat?: string; lon?: string; accuracy?: number;
     timestamp?: string; timestampSec?: string; timestampUTC?: string;

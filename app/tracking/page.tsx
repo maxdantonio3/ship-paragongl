@@ -1,8 +1,29 @@
-// ship.paragongl.com — tracking page — 2026-07-20-v8
+// ship.paragongl.com — tracking page — 2026-07-23-v20
 "use client";
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
+
+// ── Internal event filter (mirrors app/api/track/route.ts) ──
+// Second line of defence: the API already filters these, but a cached or
+// stale response should never surface internal events to a customer.
+const HIDDEN_EVENT_PATTERNS = [
+  "has the app", "app not installed", "uninstalled", "installed the app",
+  "device may be switched off",
+  "sent text message", "text message to the driver", "email sent to",
+  "sms sent", "sent whatsapp", "notification sent", "sent verification code",
+  "has viewed the load track", "viewed the load track",
+  "updated stop", "updated load number", "updated shipper",
+  "updated carrier", "updated broker", "updated driver",
+  "switched from eld", "eld track", "set to eld",
+  "reset by system", "post geofence", "needs to start", "autostart failed",
+];
+
+function isInternalEvent(description: unknown): boolean {
+  const s = String(description ?? "").toLowerCase();
+  if (!s) return false;
+  return HIDDEN_EVENT_PATTERNS.some(p => s.includes(p));
+}
 
 // ── Types ──────────────────────────────────────────────
 interface Stop {
@@ -48,14 +69,68 @@ interface TrackResult {
 }
 
 // ── Helpers ──────────────────────────────────────────────
-function formatTs(ts?: string | null) {
+// Map US states → IANA timezone, so stop times render in the STOP's local
+// time rather than the viewer's browser timezone. A delivery appointment in
+// Orlando must read the same whether the customer opens it in Miami or Seattle.
+const STATE_TZ: Record<string, string> = {
+  // Eastern
+  CT:"America/New_York", DC:"America/New_York", DE:"America/New_York",
+  GA:"America/New_York", MA:"America/New_York", MD:"America/New_York",
+  ME:"America/New_York", NC:"America/New_York", NH:"America/New_York",
+  NJ:"America/New_York", NY:"America/New_York", OH:"America/New_York",
+  PA:"America/New_York", RI:"America/New_York", SC:"America/New_York",
+  VA:"America/New_York", VT:"America/New_York", WV:"America/New_York",
+  MI:"America/New_York", IN:"America/New_York", KY:"America/New_York",
+  FL:"America/New_York",
+  // Central
+  AL:"America/Chicago", AR:"America/Chicago", IA:"America/Chicago",
+  IL:"America/Chicago", KS:"America/Chicago", LA:"America/Chicago",
+  MN:"America/Chicago", MO:"America/Chicago", MS:"America/Chicago",
+  ND:"America/Chicago", NE:"America/Chicago", OK:"America/Chicago",
+  SD:"America/Chicago", TN:"America/Chicago", TX:"America/Chicago",
+  WI:"America/Chicago",
+  // Mountain
+  CO:"America/Denver", ID:"America/Denver", MT:"America/Denver",
+  NM:"America/Denver", UT:"America/Denver", WY:"America/Denver",
+  AZ:"America/Phoenix",
+  // Pacific & beyond
+  CA:"America/Los_Angeles", NV:"America/Los_Angeles",
+  OR:"America/Los_Angeles", WA:"America/Los_Angeles",
+  AK:"America/Anchorage", HI:"Pacific/Honolulu",
+};
+
+function tzForState(state?: string | null): string | undefined {
+  if (!state) return undefined;
+  return STATE_TZ[state.trim().toUpperCase()];
+}
+
+// TruckerTools is inconsistent: some timestamps carry an offset/Z, others are
+// bare local strings. `new Date("2026-07-22 12:30:00")` silently parses as the
+// BROWSER's timezone, so a bare TT string would render at the wrong instant and
+// then get labelled with the viewer's zone — a confident-looking wrong answer.
+// Treating bare strings as UTC makes the input unambiguous before formatting.
+function parseTs(ts: string): Date | null {
+  const raw = String(ts).trim();
+  if (!raw) return null;
+  const hasZone = /(?:Z|z|[+-]\d{2}:?\d{2})$/.test(raw);
+  const iso = raw.includes("T") ? raw : raw.replace(" ", "T");
+  const d = new Date(hasZone ? iso : `${iso}Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+// Pass `state` to render in that stop's local time. Without it, falls back to
+// the viewer's timezone (correct for "last updated", which is a live moment).
+function formatTs(ts?: string | null, state?: string | null) {
   if (!ts) return "—";
   try {
-    return new Date(ts).toLocaleString("en-US", {
+    const d = parseTs(ts);
+    if (!d) return String(ts);
+    return d.toLocaleString("en-US", {
       month: "short", day: "numeric", year: "numeric",
       hour: "numeric", minute: "2-digit", timeZoneName: "short",
+      timeZone: tzForState(state),
     });
-  } catch { return ts; }
+  } catch { return String(ts); }
 }
 
 function statusColor(status: string) {
@@ -356,101 +431,68 @@ export default function TrackingPage() {
                   )}
                 </div>
 
-                {/* Stops — Pickup & Delivery */}
+                {/* Stops — Card Style */}
                 {(result.stops ?? []).length > 0 && (
-                  <div className="border-b border-gray-100">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-6 pt-5 pb-3">Stops</p>
+                  <div className="px-6 py-5 border-b border-gray-100">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Stops</p>
+                    <div className="flex flex-col gap-3">
+                      {(result.stops ?? []).map((stop, idx) => {
+                        const isLast = idx === (result.stops ?? []).length - 1;
+                        const label  = idx === 0 ? "Origin" : isLast ? "Destination" : `Stop ${idx + 1}`;
+                        const enteredLabel = idx === 0 ? "Entered pickup" : isLast ? "Entered delivery" : "Entered stop";
+                        const leftLabel    = idx === 0 ? "Left pickup"    : isLast ? "Left delivery"    : "Left stop";
 
-                    {(result.stops ?? []).map((stop, idx) => {
-                      const isPickup   = stop.type?.toLowerCase().includes("pickup") || idx === 0;
-                      const isDelivery = !isPickup;
-                      const label      = isPickup ? "Pickup" : "Delivery";
-                      const letter     = String.fromCharCode(65 + idx);
-                      const hasArrived = !!stop.arrivedAt;
-
-                      return (
-                        <div key={idx} className="px-6 pb-5">
-                          {/* Stop header */}
-                          <div className="flex items-center gap-2 mb-3">
-                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${isPickup ? "bg-[#1a4fa0]" : "bg-[#e07b2b]"}`}>
-                              {letter}
-                            </div>
-                            <div className="flex items-center gap-2 flex-1 min-w-0">
-                              <span className={`text-xs font-bold uppercase tracking-wide ${isPickup ? "text-blue-700" : "text-orange-700"}`}>
-                                {label}
-                              </span>
-                              {hasArrived && (
-                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${isPickup ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700"}`}>
-                                  Completed
-                                </span>
-                              )}
-                              {!hasArrived && stop.scheduledAt && (
-                                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
-                                  Scheduled
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Address block */}
-                          <div className={`rounded-xl border p-4 ${isPickup ? "bg-blue-50 border-blue-100" : isDelivery && hasArrived ? "bg-green-50 border-green-100" : "bg-orange-50 border-orange-100"}`}>
-                            {stop.address && (
-                              <p className="text-sm font-bold text-gray-900 mb-0.5">{stop.address}</p>
-                            )}
-                            <p className="text-sm font-semibold text-gray-700">
-                              {[stop.city, stop.state].filter(Boolean).join(", ")}
-                              {stop.zip && <span className="text-gray-500"> {stop.zip}</span>}
-                            </p>
-
-                            {/* Times */}
-                            <div className="mt-3 pt-3 border-t border-black/5 space-y-1.5">
-                              {stop.scheduledAt && (
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs text-gray-500">Scheduled</span>
-                                  <span className="text-xs font-semibold text-gray-700">{formatTs(stop.scheduledAt)}</span>
-                                </div>
-                              )}
-                              {stop.arrivedAt && (
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs text-gray-500">Arrived</span>
-                                  <span className="text-xs font-semibold text-gray-700">{formatTs(stop.arrivedAt)}</span>
-                                </div>
-                              )}
-                              {stop.departedAt && (
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs text-gray-500">Departed</span>
-                                  <span className="text-xs font-semibold text-gray-700">{formatTs(stop.departedAt)}</span>
-                                </div>
-                              )}
-                              {!stop.arrivedAt && !stop.scheduledAt && (
-                                <p className="text-xs text-gray-400 italic">No timing data yet</p>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Connector line between stops */}
-                          {idx < (result.stops ?? []).length - 1 && (
-                            <div className="flex justify-center mt-2 mb-1">
-                              <div className="flex flex-col items-center gap-1">
-                                <div className="w-px h-3 bg-gray-300" />
-                                <svg className="w-3 h-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
-                                </svg>
+                        return (
+                          <div key={idx} className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                            {/* Header row */}
+                            <div className="flex justify-between items-start mb-3">
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-1">{label}</p>
+                                <p className="text-[15px] font-bold text-gray-900 leading-tight">
+                                  {[stop.city, stop.state].filter(Boolean).join(", ")}
+                                  {stop.zip ? ` ${stop.zip}` : ""}
+                                </p>
                               </div>
+                              {stop.scheduledAt && (
+                                <div className="text-right ml-3 flex-shrink-0">
+                                  <p className="text-xs text-gray-400 mb-0.5">Appointment</p>
+                                  <p className="text-xs font-semibold text-gray-700">{formatTs(stop.scheduledAt, stop.state)}</p>
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
+
+                            {/* Sub events */}
+                            {(stop.arrivedAt || stop.departedAt) && (
+                              <div className="border-t border-gray-200 pt-3 flex flex-col gap-1.5">
+                                {stop.arrivedAt && (
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-xs font-medium text-[#1a4fa0]">{enteredLabel}</span>
+                                    <span className="text-xs text-gray-400">{formatTs(stop.arrivedAt, stop.state)}</span>
+                                  </div>
+                                )}
+                                {stop.departedAt && (
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-xs font-medium text-[#1a4fa0]">{leftLabel}</span>
+                                    <span className="text-xs text-gray-400">{formatTs(stop.departedAt, stop.state)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
                 {/* Events timeline */}
                 {(result.events ?? []).length > 0 && (() => {
                   try {
-                  // Sort most recent first
-                  const sorted = [...(result.events ?? [])]
-                    .filter(e => e != null)
+                  // Drop internal events, then sort most recent first
+                  const shown = (result.events ?? [])
+                    .filter(e => e != null && !isInternalEvent(e.description));
+                  if (shown.length === 0) return null;
+                  const sorted = [...shown]
                     .sort((a, b) => {
                       try {
                         const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
@@ -460,7 +502,7 @@ export default function TrackingPage() {
                     });
                   const PREVIEW = 5;
                   const visible = showAllEvents ? sorted : sorted.slice(0, PREVIEW);
-                  const hidden  = sorted.length - PREVIEW;
+                  const hidden  = Math.max(0, sorted.length - PREVIEW);
 
                   return (
                     <div className="px-6 py-5">
@@ -469,15 +511,15 @@ export default function TrackingPage() {
                         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                           All Events
                           <span className="ml-1.5 text-gray-300 font-normal normal-case tracking-normal">
-                            ({(result.events ?? []).length})
+                            ({shown.length})
                           </span>
                         </p>
-                        {(result.events ?? []).length > PREVIEW && (
+                        {shown.length > PREVIEW && (
                           <button
                             onClick={() => setShowAllEvents(v => !v)}
                             className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors"
                           >
-                            {showAllEvents ? "Show less ↑" : `See all ${(result.events ?? []).length} ↓`}
+                            {showAllEvents ? "Show less ↑" : `See all ${shown.length} ↓`}
                           </button>
                         )}
                       </div>
@@ -516,7 +558,7 @@ export default function TrackingPage() {
                       </div>
 
                       {/* Show more / less button at bottom */}
-                      {(result.events ?? []).length > PREVIEW && (
+                      {shown.length > PREVIEW && (
                         <button
                           onClick={() => setShowAllEvents(v => !v)}
                           className="mt-4 w-full py-2.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-all"
