@@ -1,4 +1,4 @@
-// ship.paragongl.com — tracking API — 2026-07-22-v15
+// ship.paragongl.com — tracking API — 2026-07-22-v14
 import { NextRequest, NextResponse } from "next/server";
 
 const PARTNER_ID = process.env.TT_PARTNER_ID!;
@@ -63,6 +63,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Log full raw load object to see exact field names from TruckerTools
+    console.log("[track] raw load keys:", JSON.stringify(Object.keys(load)));
+    console.log("[track] raw stops field:", JSON.stringify(load.stops));
+    console.log("[track] full raw load:", JSON.stringify(load).slice(0, 2000));
 
     const loc = load.latestLocation;
     const lastLocation = loc ? [loc.city, loc.state].filter(Boolean).join(", ") : null;
@@ -155,11 +159,6 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      _raw_keys: Object.keys(load),
-      _raw_stops: (load as Record<string,unknown>).stops,
-      _raw_stop_details: (load as Record<string,unknown>).stopDetails,
-      _raw_stop_list: (load as Record<string,unknown>).stopList,
-      _raw_locations: (load as Record<string,unknown>).locations,
       loadNumber:    load.loadNumber          ?? id,
       shipperLoadId: load.shipperLoadNumber   ?? load.shipperLoadId ?? null,
       status,
