@@ -1,4 +1,4 @@
-// ship.paragongl.com — tracking API — 2026-07-23-v20
+// ship.paragongl.com — tracking API — 2026-07-23-v21
 import { NextRequest, NextResponse } from "next/server";
 
 // ── Internal event filtering ───────────────────────────

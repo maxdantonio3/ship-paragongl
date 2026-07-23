@@ -1,4 +1,4 @@
-// ship.paragongl.com — tracking page — 2026-07-23-v20
+// ship.paragongl.com — tracking page — 2026-07-23-v21
 "use client";
 
 import { useState, useRef, useEffect } from "react";
@@ -226,7 +226,9 @@ export default function TrackingPage() {
     <div className="min-h-screen flex flex-col">
 
       {/* ── NAV ── */}
-      <nav className="bg-[#0d1b2e] border-b border-white/10 h-14 flex items-center px-6 justify-between z-10 relative">
+      {/* White header: logo-full.png is a dark navy wordmark built for light
+          backgrounds, so it was near-invisible on the old navy nav. */}
+      <nav className="bg-white border-b border-gray-200 h-14 flex items-center px-6 justify-between z-10 relative">
         <div className="flex items-center">
           <Image
             src="/logo-full.png"
@@ -237,9 +239,9 @@ export default function TrackingPage() {
             priority
           />
         </div>
-        <div className="flex items-center gap-5 text-sm text-white/60">
-          <a href="tel:4078532923" className="hover:text-white transition-colors">(407) 853-2923</a>
-          <a href="https://os.paragongl.com/login" target="_blank" className="hover:text-white transition-colors">Staff Login</a>
+        <div className="flex items-center gap-5 text-sm text-gray-500">
+          <a href="tel:4078532923" className="hover:text-[#1a4fa0] transition-colors">(407) 853-2923</a>
+          <a href="https://os.paragongl.com/login" target="_blank" className="hover:text-[#1a4fa0] transition-colors">Staff Login</a>
         </div>
       </nav>
 
