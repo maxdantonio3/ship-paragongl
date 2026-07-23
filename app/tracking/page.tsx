@@ -1,4 +1,4 @@
-// ship.paragongl.com — tracking page — 2026-07-20-v8
+// ship.paragongl.com — tracking page — 2026-07-22-v15
 "use client";
 
 import { useState, useRef, useEffect } from "react";
@@ -356,92 +356,57 @@ export default function TrackingPage() {
                   )}
                 </div>
 
-                {/* Stops — Pickup & Delivery */}
+                {/* Stops — Card Style */}
                 {(result.stops ?? []).length > 0 && (
-                  <div className="border-b border-gray-100">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-6 pt-5 pb-3">Stops</p>
+                  <div className="px-6 py-5 border-b border-gray-100">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Stops</p>
+                    <div className="flex flex-col gap-3">
+                      {(result.stops ?? []).map((stop, idx) => {
+                        const isLast = idx === (result.stops ?? []).length - 1;
+                        const label  = idx === 0 ? "Origin" : isLast ? "Destination" : `Stop ${idx + 1}`;
+                        const enteredLabel = idx === 0 ? "Entered pickup" : isLast ? "Entered delivery" : "Entered stop";
+                        const leftLabel    = idx === 0 ? "Left pickup"    : isLast ? "Left delivery"    : "Left stop";
 
-                    {(result.stops ?? []).map((stop, idx) => {
-                      const isPickup   = stop.type?.toLowerCase().includes("pickup") || idx === 0;
-                      const isDelivery = !isPickup;
-                      const label      = isPickup ? "Pickup" : "Delivery";
-                      const letter     = String.fromCharCode(65 + idx);
-                      const hasArrived = !!stop.arrivedAt;
-
-                      return (
-                        <div key={idx} className="px-6 pb-5">
-                          {/* Stop header */}
-                          <div className="flex items-center gap-2 mb-3">
-                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${isPickup ? "bg-[#1a4fa0]" : "bg-[#e07b2b]"}`}>
-                              {letter}
-                            </div>
-                            <div className="flex items-center gap-2 flex-1 min-w-0">
-                              <span className={`text-xs font-bold uppercase tracking-wide ${isPickup ? "text-blue-700" : "text-orange-700"}`}>
-                                {label}
-                              </span>
-                              {hasArrived && (
-                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${isPickup ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700"}`}>
-                                  Completed
-                                </span>
-                              )}
-                              {!hasArrived && stop.scheduledAt && (
-                                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
-                                  Scheduled
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Address block */}
-                          <div className={`rounded-xl border p-4 ${isPickup ? "bg-blue-50 border-blue-100" : isDelivery && hasArrived ? "bg-green-50 border-green-100" : "bg-orange-50 border-orange-100"}`}>
-                            {stop.address && (
-                              <p className="text-sm font-bold text-gray-900 mb-0.5">{stop.address}</p>
-                            )}
-                            <p className="text-sm font-semibold text-gray-700">
-                              {[stop.city, stop.state].filter(Boolean).join(", ")}
-                              {stop.zip && <span className="text-gray-500"> {stop.zip}</span>}
-                            </p>
-
-                            {/* Times */}
-                            <div className="mt-3 pt-3 border-t border-black/5 space-y-1.5">
-                              {stop.scheduledAt && (
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs text-gray-500">Scheduled</span>
-                                  <span className="text-xs font-semibold text-gray-700">{formatTs(stop.scheduledAt)}</span>
-                                </div>
-                              )}
-                              {stop.arrivedAt && (
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs text-gray-500">Arrived</span>
-                                  <span className="text-xs font-semibold text-gray-700">{formatTs(stop.arrivedAt)}</span>
-                                </div>
-                              )}
-                              {stop.departedAt && (
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs text-gray-500">Departed</span>
-                                  <span className="text-xs font-semibold text-gray-700">{formatTs(stop.departedAt)}</span>
-                                </div>
-                              )}
-                              {!stop.arrivedAt && !stop.scheduledAt && (
-                                <p className="text-xs text-gray-400 italic">No timing data yet</p>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Connector line between stops */}
-                          {idx < (result.stops ?? []).length - 1 && (
-                            <div className="flex justify-center mt-2 mb-1">
-                              <div className="flex flex-col items-center gap-1">
-                                <div className="w-px h-3 bg-gray-300" />
-                                <svg className="w-3 h-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
-                                </svg>
+                        return (
+                          <div key={idx} className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                            {/* Header row */}
+                            <div className="flex justify-between items-start mb-3">
+                              <div>
+                                <p className="text-xs font-700 uppercase tracking-widest text-gray-400 mb-1">{label}</p>
+                                <p className="text-[15px] font-bold text-gray-900 leading-tight">
+                                  {[stop.city, stop.state].filter(Boolean).join(", ")}
+                                  {stop.zip ? ` ${stop.zip}` : ""}
+                                </p>
                               </div>
+                              {stop.scheduledAt && (
+                                <div className="text-right ml-3 flex-shrink-0">
+                                  <p className="text-xs text-gray-400 mb-0.5">Appointment</p>
+                                  <p className="text-xs font-semibold text-gray-700">{formatTs(stop.scheduledAt)}</p>
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
+
+                            {/* Sub events */}
+                            {(stop.arrivedAt || stop.departedAt) && (
+                              <div className="border-t border-gray-200 pt-3 flex flex-col gap-1.5">
+                                {stop.arrivedAt && (
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-xs font-medium text-[#1a4fa0]">{enteredLabel}</span>
+                                    <span className="text-xs text-gray-400">{formatTs(stop.arrivedAt)}</span>
+                                  </div>
+                                )}
+                                {stop.departedAt && (
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-xs font-medium text-[#1a4fa0]">{leftLabel}</span>
+                                    <span className="text-xs text-gray-400">{formatTs(stop.departedAt)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
