@@ -2,38 +2,57 @@ import type { Config } from "tailwindcss";
 
 const config: Config = {
   content: [
-    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./components/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     extend: {
       colors: {
-        // Paragon brand — matched from Nexus portal
-        navy: {
-          DEFAULT: "#0d1b2e",
-          light:   "#112240",
-          muted:   "#1e3a5f",
+        manifest: {
+          bg: "#F6F7F9",
+          panel: "#FFFFFF",
+          ink: "#152238",
+          navy: {
+            DEFAULT: "#152238",
+            50: "#EEF1F5",
+            100: "#D7DEE8",
+            200: "#AEBDD1",
+            400: "#4C617F",
+            600: "#243450",
+            700: "#1B2B44",
+            800: "#152238",
+            900: "#0E1626",
+          },
+          signal: {
+            DEFAULT: "#E0862E",
+            50: "#FDF3E7",
+            100: "#FBE3C4",
+            400: "#EA9D46",
+            600: "#C96F1C",
+          },
+          line: "#E3E7ED",
         },
-        blue: {
-          DEFAULT: "#1a4fa0",
-          light:   "#2360bf",
-          sky:     "#4d9fff",
+        status: {
+          cold: "#5B7290",
+          warm: "#E0862E",
+          quoting: "#7A6FD0",
+          customer: "#2E9E64",
         },
-        orange: {
-          DEFAULT: "#e07b2b",
-          light:   "#f0903a",
-        },
-        // UI neutrals
-        surface: "#f7f8fc",
-        border:  "#e2e8f0",
       },
       fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["var(--font-grotesk)", "system-ui", "sans-serif"],
+        body: ["var(--font-inter)", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "monospace"],
+      },
+      boxShadow: {
+        panel: "0 1px 2px rgba(21,34,56,0.06), 0 1px 1px rgba(21,34,56,0.04)",
+      },
+      borderRadius: {
+        md: "8px",
+        lg: "12px",
       },
     },
   },
   plugins: [],
 };
-
 export default config;

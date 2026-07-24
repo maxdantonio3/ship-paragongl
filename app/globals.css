@@ -2,22 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  html {
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
+html,
+body {
+  background-color: #F6F7F9;
+  color: #152238;
+}
+
+* {
+  border-color: #E3E7ED;
+}
+
+::selection {
+  background-color: #E0862E;
+  color: white;
 }
 
 @layer components {
-  /* Subtle animated pulse for live indicator */
-  .live-dot {
-    @apply w-2 h-2 rounded-full bg-green-400 inline-block;
-    animation: livepulse 2s ease-in-out infinite;
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-md bg-manifest-signal px-4 py-2 text-sm font-semibold text-white shadow-panel transition hover:bg-manifest-signal-600 focus:outline-none focus:ring-2 focus:ring-manifest-signal-400 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
   }
-}
-
-@keyframes livepulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%       { opacity: 0.5; transform: scale(0.85); }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-manifest-line bg-white px-4 py-2 text-sm font-medium text-manifest-navy-700 shadow-panel transition hover:bg-manifest-navy-50 focus:outline-none focus:ring-2 focus:ring-manifest-navy-400 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 shadow-panel transition hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-300 focus:ring-offset-2 disabled:opacity-50;
+  }
+  .field-label {
+    @apply block text-xs font-semibold uppercase tracking-wide text-manifest-navy-400 mb-1.5;
+  }
+  .field-input {
+    @apply block w-full rounded-md border border-manifest-line bg-white px-3 py-2 text-sm text-manifest-ink placeholder:text-manifest-navy-200 focus:outline-none focus:ring-2 focus:ring-manifest-signal-400 focus:border-transparent;
+  }
+  .panel {
+    @apply rounded-lg border border-manifest-line bg-white shadow-panel;
+  }
 }
