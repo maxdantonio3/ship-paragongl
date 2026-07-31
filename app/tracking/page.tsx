@@ -1,4 +1,4 @@
-// ship.paragongl.com — tracking page — 2026-07-23-v21
+// ship.paragongl.com — tracking page — 2026-07-23-v22
 "use client";
 
 import { useState, useRef, useEffect } from "react";

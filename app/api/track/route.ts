@@ -1,5 +1,6 @@
-// ship.paragongl.com — tracking API — 2026-07-23-v21
+// ship.paragongl.com — tracking API — 2026-07-23-v22
 import { NextRequest, NextResponse } from "next/server";
+import { getStopsForLoad } from "../../../lib/supabase";
 
 // ── Internal event filtering ───────────────────────────
 // TT returns `code: null` on every event, so we match on description text.
@@ -104,8 +105,20 @@ export async function POST(req: NextRequest) {
       load.status ??
       "In Transit";
 
+    // ── Stops ──────────────────────────────────────────────
+    // Source of truth is the shared Supabase view (tracking_stops_view), which
+    // Nexus populates with city/state/zip at track-creation time and fills
+    // arrived_at/departed_at later via the status webhook. The TruckerTools pull
+    // API does NOT return stop addresses (stops always came back []), so this is
+    // the only place real stop data comes from.
+    //
+    // We still parse TT stops as a fallback: if Supabase is unreachable or has no
+    // row for this load, and TT ever does return stops, we use those rather than
+    // showing nothing. In practice Supabase wins because TT stops are empty.
+    const supabaseStops = await getStopsForLoad(id);
+
     const rawStops = load.stops ?? load.stopDetails ?? load.stopList ?? [];
-    const stops = rawStops.map((s: TTStop, idx: number) => ({
+    const ttStops = rawStops.map((s: TTStop, idx: number) => ({
       sequence:    s.stopSequence ?? s.sequence ?? s.stopNumber ?? idx,
       type:        s.stopType ?? s.type ?? (idx === 0 ? "PICKUP" : "DELIVERY"),
       address:     s.address ?? s.streetAddress ?? s.location,
@@ -117,6 +130,12 @@ export async function POST(req: NextRequest) {
       arrivedAt:   s.actualArrival    ?? s.arrivedAt   ?? s.enteredAt,
       departedAt:  s.actualDeparture  ?? s.departedAt  ?? s.leftAt,
     }));
+
+    const stops = supabaseStops.length > 0 ? supabaseStops : ttStops;
+    console.log(
+      `[track] stops: ${supabaseStops.length} from supabase, ` +
+      `${ttStops.length} from TT — using ${supabaseStops.length > 0 ? "supabase" : "TT"}`
+    );
 
     // Extract location pings from events — must declare rawEvents first
     const rawEvents = load.events ?? load.allEvents ?? load.trackingEvents ?? load.eventList ?? [];
