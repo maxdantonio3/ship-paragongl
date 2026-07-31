@@ -1,8 +1,6 @@
 {
-  "crons": [
-    {
-      "path": "/api/cron/follow-up-digest",
-      "schedule": "0 13 * * *"
-    }
-  ]
+  "framework": "nextjs",
+  "buildCommand": "next build",
+  "outputDirectory": ".next",
+  "regions": ["iad1"]
 }
