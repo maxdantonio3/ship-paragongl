@@ -1,4 +1,4 @@
-// ship.paragongl.com — tracking page — 2026-07-23-v29
+// ship.paragongl.com — tracking page — 2026-07-23-v31
 "use client";
 
 import { useState, useRef, useEffect } from "react";
@@ -254,10 +254,10 @@ export default function TrackingPage() {
           aria-hidden
         >
           <div
-            className="absolute right-[2%] top-1/2 -translate-y-1/2 max-w-[90%]"
+            className="absolute right-[-15%] top-[75%] -translate-y-1/2 max-w-none"
             style={{
-              width: "520px",
-              height: "520px",
+              width: "900px",
+              height: "900px",
               opacity: 0.3,
               backgroundImage: "url('/globe.png')",
               backgroundSize:  "contain",
