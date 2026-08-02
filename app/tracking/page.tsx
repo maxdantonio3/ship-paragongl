@@ -1,4 +1,4 @@
-// ship.paragongl.com — tracking page — 2026-07-23-v22
+// ship.paragongl.com — tracking page — 2026-07-23-v24
 "use client";
 
 import { useState, useRef, useEffect } from "react";
@@ -306,7 +306,7 @@ export default function TrackingPage() {
                       placeholder="e.g. PGL-12345"
                       autoComplete="off"
                       autoFocus
-                      className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
+                      className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-base sm:text-sm"
                     />
                     <p className="text-xs text-gray-400 mt-1.5">
                       Your load number was provided by your Paragon account rep.
@@ -400,86 +400,105 @@ export default function TrackingPage() {
               {/* ── LEFT PANEL ── */}
               <div className="lg:col-span-2 bg-white overflow-y-auto">
 
-                {/* Status hero */}
+                {/* Status hero — icon badge + blue pill */}
                 <div className="px-6 py-5 border-b border-gray-100">
-                  <div className="flex items-start justify-between gap-3 mb-4">
-                    <div>
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Current Status</p>
-                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${statusColor(result.status)}`}>
+                  <p className="text-xs font-semibold text-[#185FA5] uppercase tracking-wider mb-3">Current Status</p>
+                  <div className="flex items-center gap-4">
+                    <div className="w-[52px] h-[52px] rounded-full bg-[#1a4fa0] flex items-center justify-center flex-shrink-0">
+                      <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM20 17a2 2 0 11-4 0 2 2 0 014 0z"/>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1"/>
+                      </svg>
+                    </div>
+                    <div className="min-w-0">
+                      <span className="inline-block bg-[#E6F1FB] text-[#0C447C] text-sm font-semibold px-3.5 py-1 rounded-full">
                         {result.status}
                       </span>
+                      {result.lastLocation && (
+                        <div className="flex items-center gap-1.5 mt-2">
+                          <svg className="w-3.5 h-3.5 text-[#1a4fa0] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                          </svg>
+                          <span className="text-sm font-medium text-gray-900 truncate">{result.lastLocation}</span>
+                        </div>
+                      )}
+                      {result.lastUpdated && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          Updated {formatTs(result.lastUpdated)}
+                        </p>
+                      )}
                     </div>
-                    {result.shipperLoadId && (
-                      <div className="text-right">
-                        <p className="text-xs text-gray-400 mb-1">Shipper Load ID</p>
-                        <p className="text-sm font-medium text-gray-700">{result.shipperLoadId}</p>
-                      </div>
-                    )}
                   </div>
-
-                  {result.lastLocation && (
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                      </svg>
-                      <span className="font-medium">{result.lastLocation}</span>
+                  {result.shipperLoadId && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between items-center">
+                      <span className="text-xs text-gray-400">Shipper Load ID</span>
+                      <span className="text-sm font-medium text-gray-700">{result.shipperLoadId}</span>
                     </div>
-                  )}
-                  {result.lastUpdated && (
-                    <p className="text-xs text-gray-400 mt-1.5">
-                      Last updated: {formatTs(result.lastUpdated)}
-                    </p>
                   )}
                 </div>
 
-                {/* Stops — Card Style */}
+                {/* Stops — connected timeline */}
                 {(result.stops ?? []).length > 0 && (
                   <div className="px-6 py-5 border-b border-gray-100">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Stops</p>
-                    <div className="flex flex-col gap-3">
+                    <p className="text-xs font-semibold text-[#185FA5] uppercase tracking-wider mb-4">Stops</p>
+                    <div className="flex flex-col">
                       {(result.stops ?? []).map((stop, idx) => {
-                        const isLast = idx === (result.stops ?? []).length - 1;
-                        const label  = idx === 0 ? "Origin" : isLast ? "Destination" : `Stop ${idx + 1}`;
+                        const isLast   = idx === (result.stops ?? []).length - 1;
+                        const label    = idx === 0 ? "Origin" : isLast ? "Destination" : `Stop ${idx + 1}`;
                         const enteredLabel = idx === 0 ? "Entered pickup" : isLast ? "Entered delivery" : "Entered stop";
                         const leftLabel    = idx === 0 ? "Left pickup"    : isLast ? "Left delivery"    : "Left stop";
+                        const reached  = Boolean(stop.arrivedAt || stop.departedAt);
 
                         return (
-                          <div key={idx} className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                            {/* Header row */}
-                            <div className="flex justify-between items-start mb-3">
-                              <div>
-                                <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-1">{label}</p>
-                                <p className="text-[15px] font-bold text-gray-900 leading-tight">
-                                  {[stop.city, stop.state].filter(Boolean).join(", ")}
-                                  {stop.zip ? ` ${stop.zip}` : ""}
-                                </p>
+                          <div key={idx} className="flex gap-3.5">
+                            {/* Timeline rail */}
+                            <div className="flex flex-col items-center flex-shrink-0">
+                              <div
+                                className={`w-3 h-3 rounded-full mt-1 ${
+                                  reached || idx === 0
+                                    ? "bg-[#1a4fa0]"
+                                    : "bg-white border-2 border-[#85B7EB]"
+                                }`}
+                              />
+                              {!isLast && <div className="w-0.5 flex-1 bg-[#B5D4F4] min-h-[16px]" />}
+                            </div>
+
+                            {/* Stop content */}
+                            <div className={`flex-1 min-w-0 ${isLast ? "pb-0" : "pb-5"}`}>
+                              <div className="flex justify-between items-start gap-3">
+                                <div className="min-w-0">
+                                  <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-0.5">{label}</p>
+                                  <p className="text-[15px] font-bold text-gray-900 leading-tight">
+                                    {[stop.city, stop.state].filter(Boolean).join(", ")}
+                                    {stop.zip ? ` ${stop.zip}` : ""}
+                                  </p>
+                                </div>
+                                {stop.scheduledAt && (
+                                  <div className="text-right flex-shrink-0">
+                                    <p className="text-[10px] text-gray-400 mb-0.5">Appointment</p>
+                                    <p className="text-xs font-semibold text-[#185FA5]">{formatTs(stop.scheduledAt, stop.state)}</p>
+                                  </div>
+                                )}
                               </div>
-                              {stop.scheduledAt && (
-                                <div className="text-right ml-3 flex-shrink-0">
-                                  <p className="text-xs text-gray-400 mb-0.5">Appointment</p>
-                                  <p className="text-xs font-semibold text-gray-700">{formatTs(stop.scheduledAt, stop.state)}</p>
+
+                              {(stop.arrivedAt || stop.departedAt) && (
+                                <div className="mt-2 flex flex-col gap-1">
+                                  {stop.arrivedAt && (
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-xs font-medium text-[#1a4fa0]">{enteredLabel}</span>
+                                      <span className="text-xs text-gray-400">{formatTs(stop.arrivedAt, stop.state)}</span>
+                                    </div>
+                                  )}
+                                  {stop.departedAt && (
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-xs font-medium text-[#1a4fa0]">{leftLabel}</span>
+                                      <span className="text-xs text-gray-400">{formatTs(stop.departedAt, stop.state)}</span>
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
-
-                            {/* Sub events */}
-                            {(stop.arrivedAt || stop.departedAt) && (
-                              <div className="border-t border-gray-200 pt-3 flex flex-col gap-1.5">
-                                {stop.arrivedAt && (
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-xs font-medium text-[#1a4fa0]">{enteredLabel}</span>
-                                    <span className="text-xs text-gray-400">{formatTs(stop.arrivedAt, stop.state)}</span>
-                                  </div>
-                                )}
-                                {stop.departedAt && (
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-xs font-medium text-[#1a4fa0]">{leftLabel}</span>
-                                    <span className="text-xs text-gray-400">{formatTs(stop.departedAt, stop.state)}</span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
                           </div>
                         );
                       })}
@@ -577,7 +596,9 @@ export default function TrackingPage() {
               </div>
 
               {/* ── RIGHT PANEL — MAP ── */}
-              <div className="lg:col-span-3 bg-gray-100 relative min-h-[400px] lg:min-h-0">
+              {/* order-first pulls the map to the top on mobile (stacked view);
+                  lg:order-none restores the normal right-column position on desktop. */}
+              <div className="order-first lg:order-none lg:col-span-3 bg-gray-100 relative h-[300px] lg:h-auto lg:min-h-0">
                 <TrackingMap result={result} />
               </div>
 
