@@ -1,4 +1,4 @@
-// ship.paragongl.com — tracking page — 2026-07-23-v27
+// ship.paragongl.com — tracking page — 2026-07-23-v28
 "use client";
 
 import { useState, useRef, useEffect } from "react";
@@ -250,7 +250,7 @@ export default function TrackingPage() {
 
         {/* Globe watermark — like C.H. Robinson */}
         <div
-          className="absolute inset-0 pointer-events-none select-none z-0"
+          className="absolute top-0 left-0 right-0 min-h-[calc(100vh-56px)] pointer-events-none select-none z-0 overflow-hidden"
           aria-hidden
         >
           <div
