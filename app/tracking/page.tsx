@@ -1,4 +1,4 @@
-// ship.paragongl.com — tracking page — 2026-07-23-v23
+// ship.paragongl.com — tracking page — 2026-07-23-v24
 "use client";
 
 import { useState, useRef, useEffect } from "react";
@@ -306,7 +306,7 @@ export default function TrackingPage() {
                       placeholder="e.g. PGL-12345"
                       autoComplete="off"
                       autoFocus
-                      className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
+                      className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-base sm:text-sm"
                     />
                     <p className="text-xs text-gray-400 mt-1.5">
                       Your load number was provided by your Paragon account rep.
@@ -596,7 +596,9 @@ export default function TrackingPage() {
               </div>
 
               {/* ── RIGHT PANEL — MAP ── */}
-              <div className="lg:col-span-3 bg-gray-100 relative min-h-[400px] lg:min-h-0">
+              {/* order-first pulls the map to the top on mobile (stacked view);
+                  lg:order-none restores the normal right-column position on desktop. */}
+              <div className="order-first lg:order-none lg:col-span-3 bg-gray-100 relative h-[300px] lg:h-auto lg:min-h-0">
                 <TrackingMap result={result} />
               </div>
 
