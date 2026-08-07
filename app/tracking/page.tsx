@@ -1,4 +1,4 @@
-// ship.paragongl.com — tracking page — 2026-07-23-v32
+// ship.paragongl.com — tracking page — 2026-07-23-v33
 "use client";
 
 import { useState, useRef, useEffect } from "react";
@@ -34,6 +34,7 @@ interface Stop {
   state?: string;
   zip?: string;
   scheduledAt?: string;
+  scheduledEnd?: string;
   arrivedAt?: string;
   departedAt?: string;
 }
@@ -110,8 +111,12 @@ function tzForState(state?: string | null): string | undefined {
 // then get labelled with the viewer's zone — a confident-looking wrong answer.
 // Treating bare strings as UTC makes the input unambiguous before formatting.
 function parseTs(ts: string): Date | null {
-  const raw = String(ts).trim();
+  let raw = String(ts).trim();
   if (!raw) return null;
+  // Normalize a trailing 2-digit offset like "+00" / "-05" to "+00:00" —
+  // Postgres sometimes reports offsets this way, and JS Date rejects the short
+  // form as Invalid Date. Full offsets (+00:00, +0000) and "Z" are left as-is.
+  raw = raw.replace(/([+-]\d{2})$/, "$1:00");
   const hasZone = /(?:Z|z|[+-]\d{2}:?\d{2})$/.test(raw);
   const iso = raw.includes("T") ? raw : raw.replace(" ", "T");
   const d = new Date(hasZone ? iso : `${iso}Z`);
@@ -131,6 +136,35 @@ function formatTs(ts?: string | null, state?: string | null) {
       timeZone: tzForState(state),
     });
   } catch { return String(ts); }
+}
+
+// Format an appointment window "start – end" in the stop's local timezone.
+// If end is missing, falls back to a single formatted time (formatTs).
+// Shows the date + zone once when both times are the same day; if the window
+// spans two days, shows the full date on each side.
+function formatWindow(start?: string | null, end?: string | null, state?: string | null) {
+  if (!end) return formatTs(start, state);          // single time — no window
+  if (!start) return formatTs(end, state);
+  try {
+    const ds = parseTs(start);
+    const de = parseTs(end);
+    if (!ds || !de) return formatTs(start, state);
+    const tz = tzForState(state);
+    const dateFmt: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric", timeZone: tz };
+    const timeFmt: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit", timeZone: tz };
+    const timeZoneFmt: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit", timeZoneName: "short", timeZone: tz };
+
+    const sameDay = ds.toLocaleDateString("en-US", { timeZone: tz }) === de.toLocaleDateString("en-US", { timeZone: tz });
+    if (sameDay) {
+      // "Aug 7, 2026, 8:30 AM – 3:00 PM EDT"
+      const date = ds.toLocaleDateString("en-US", dateFmt);
+      const t1 = ds.toLocaleTimeString("en-US", timeFmt);
+      const t2 = de.toLocaleTimeString("en-US", timeZoneFmt);
+      return `${date}, ${t1} – ${t2}`;
+    }
+    // Spans days: "Aug 7, 8:30 AM EDT – Aug 8, 3:00 PM EDT"
+    return `${formatTs(start, state)} – ${formatTs(end, state)}`;
+  } catch { return formatTs(start, state); }
 }
 
 function statusColor(status: string) {
@@ -480,7 +514,7 @@ export default function TrackingPage() {
                                 {stop.scheduledAt && (
                                   <div className="text-right flex-shrink-0">
                                     <p className="text-[10px] text-gray-400 mb-0.5">Appointment</p>
-                                    <p className="text-xs font-semibold text-[#185FA5]">{formatTs(stop.scheduledAt, stop.state)}</p>
+                                    <p className="text-xs font-semibold text-[#185FA5]">{formatWindow(stop.scheduledAt, stop.scheduledEnd, stop.state)}</p>
                                   </div>
                                 )}
                               </div>
